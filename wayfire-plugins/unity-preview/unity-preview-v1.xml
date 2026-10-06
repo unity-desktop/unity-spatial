@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="unity_preview_v1">
+  <copyright>
+    Copyright 2026 Muqtadir
+
+    SPDX-License-Identifier: GPL-3.0-or-later
+  </copyright>
+
+  <interface name="unity_preview_manager_v1" version="1">
+    <description summary="window previews drawn by the compositor">
+      Creates previews of windows inside client surfaces.
+    </description>
+
+    <request name="get_mirror">
+      <description summary="create a preview of a window">
+        If the window does not exist or is not mapped, the compositor sends
+        closed at once. The preview shows while the surface is a mapped
+        wayfire view, also when the surface gets its role later or is mapped
+        again.
+      </description>
+      <arg name="id" type="new_id" interface="unity_preview_mirror_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"
+           summary="the surface that shows the preview"/>
+      <arg name="view_id" type="uint" summary="wayfire view id of the window"/>
+    </request>
+
+    <request name="destroy" type="destructor"/>
+  </interface>
+
+  <interface name="unity_preview_mirror_v1" version="1">
+    <description summary="a window preview inside a surface">
+      set_rect, set_alpha and set_order are double-buffered. They apply on
+      the next commit of the host surface. The preview is drawn above the
+      surface content and clipped to the surface. The preview is not drawn
+      while its rectangle is empty or its alpha is 0.
+    </description>
+
+    <enum name="error">
+      <entry name="invalid_rect" value="0" summary="width or height is negative"/>
+      <entry name="invalid_alpha" value="1" summary="alpha is outside 0 to 1"/>
+    </enum>
+
+    <request name="set_rect">
+      <description summary="set the preview rectangle">
+        Surface-local coordinates. The initial rectangle is empty. A negative
+        width or height is an invalid_rect error.
+      </description>
+      <arg name="x" type="fixed"/>
+      <arg name="y" type="fixed"/>
+      <arg name="width" type="fixed"/>
+      <arg name="height" type="fixed"/>
+    </request>
+
+    <request name="set_alpha">
+      <description summary="set the preview opacity">
+        From 0 to 1. The initial alpha is 1. Another value is an
+        invalid_alpha error.
+      </description>
+      <arg name="alpha" type="fixed"/>
+    </request>
+
+    <request name="set_order">
+      <description summary="set the stacking order of the preview">
+        A preview with a higher order is drawn above the previews of the same
+        surface with a lower order. Previews with the same order keep their
+        relative position, and a new preview starts above them. The initial
+        order is 0.
+      </description>
+      <arg name="order" type="int"/>
+    </request>
+
+    <event name="source_size">
+      <description summary="size of the window, shadow included">
+        Sent after get_mirror and when the size changes.
+      </description>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="closed">
+      <description summary="the window was unmapped">
+        The compositor ignores all later requests except destroy.
+      </description>
+    </event>
+
+    <request name="destroy" type="destructor"/>
+  </interface>
+</protocol>

@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="unity-preview">
+		<_short>Unity Preview</_short>
+		<_long>Draws window previews for unity-shell.</_long>
+		<category>Desktop</category>
+	</plugin>
+</wayfire>
