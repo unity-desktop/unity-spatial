@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="unity_spatial_gestures_v1">
+  <copyright>
+    Copyright 2026 Muqtadir
+
+    SPDX-License-Identifier: GPL-3.0-or-later
+  </copyright>
+
+  <interface name="unity_spatial_gestures_v1" version="1">
+    <description summary="touchpad gestures for the shell">
+      Sends touchpad gestures with three or more fingers to the client,
+      wherever the pointer is. The client asks for each gesture that it uses.
+      While an object for a gesture exists, the compositor sends that gesture
+      to the object and not to clients through zwp_pointer_gestures_v1. Other
+      gestures go to clients as usual.
+    </description>
+
+    <enum name="kind">
+      <entry name="swipe" value="0"/>
+      <entry name="pinch" value="1"/>
+    </enum>
+
+    <enum name="error">
+      <entry name="invalid_kind" value="0" summary="kind is not in the kind enum"/>
+      <entry name="invalid_fingers" value="1" summary="fingers is less than 3"/>
+    </enum>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="get_gesture">
+      <description summary="get the gestures of a kind with a number of fingers"/>
+      <arg name="id" type="new_id" interface="unity_spatial_gesture_v1"/>
+      <arg name="kind" type="uint" enum="kind"/>
+      <arg name="fingers" type="uint" summary="number of fingers, 3 or more"/>
+    </request>
+  </interface>
+
+  <interface name="unity_spatial_gesture_v1" version="1">
+    <description summary="touchpad gestures of one kind with one number of fingers">
+      Each gesture is one begin, zero or more update and one end event.
+    </description>
+
+    <request name="destroy" type="destructor"/>
+
+    <event name="begin">
+      <arg name="time" type="uint" summary="timestamp in milliseconds"/>
+    </event>
+
+    <event name="update">
+      <description summary="motion of the gesture">
+        For a swipe, scale is 1 and rotation is 0.
+      </description>
+      <arg name="time" type="uint" summary="timestamp in milliseconds"/>
+      <arg name="dx" type="fixed" summary="horizontal motion in logical pixels"/>
+      <arg name="dy" type="fixed" summary="vertical motion in logical pixels"/>
+      <arg name="scale" type="fixed" summary="scale relative to the begin of a pinch"/>
+      <arg name="rotation" type="fixed" summary="rotation since the last update, in degrees clockwise"/>
+    </event>
+
+    <event name="end">
+      <arg name="time" type="uint" summary="timestamp in milliseconds"/>
+      <arg name="cancelled" type="int" summary="1 if the gesture was cancelled, else 0"/>
+    </event>
+  </interface>
+</protocol>

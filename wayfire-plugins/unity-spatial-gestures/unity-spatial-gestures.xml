@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="unity-spatial-gestures">
+		<_short>Unity Spatial Gestures</_short>
+		<_long>Sends touchpad swipes and pinches with three or more fingers to unity-spatial.</_long>
+		<category>Desktop</category>
+	</plugin>
+</wayfire>
