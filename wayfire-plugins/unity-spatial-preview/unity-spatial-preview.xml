@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="unity-spatial-preview">
+		<_short>Unity Spatial Preview</_short>
+		<_long>Draws live windows into subsurfaces of unity-spatial surfaces.</_long>
+		<category>Desktop</category>
+	</plugin>
+</wayfire>
