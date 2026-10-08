@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="unity_spatial_preview_unstable">
+  <copyright>
+    Copyright 2026 Muqtadir
+
+    SPDX-License-Identifier: GPL-3.0-or-later
+  </copyright>
+
+  <description summary="live window previews">
+    The unity-spatial-preview plugin draws live windows into subsurfaces of
+    the shell.
+  </description>
+
+  <interface name="zunity_preview_manager" version="1">
+    <description summary="draw windows into client surfaces">
+      Draws live windows into subsurfaces of the client. The client places,
+      sizes, stacks and synchronizes each subsurface with wl_subsurface and
+      wp_viewport. The compositor draws only the window.
+    </description>
+
+    <enum name="error">
+      <entry name="invalid_surface" value="0" summary="the surface is not a subsurface"/>
+    </enum>
+
+    <request name="get_preview">
+      <description summary="draw a window into a surface">
+        Draws the window view_id into the surface. The compositor scales the
+        window so that its frame fills the surface, draws the window's
+        client-side shadow around the surface, draws above the surface's own
+        content and clips to the parent surface. It starts when the parent
+        surface commits the subsurface, draws only while the surface has a
+        buffer, and stops when the window unmaps. For an unknown or unmapped
+        window it draws nothing. The surface must have the wl_subsurface role.
+      </description>
+      <arg name="id" type="new_id" interface="zunity_preview"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="view_id" type="uint" summary="wayfire view id of the window"/>
+    </request>
+
+    <request name="destroy" type="destructor"/>
+  </interface>
+
+  <interface name="zunity_preview" version="1">
+    <description summary="a window drawn into a surface"/>
+
+    <request name="destroy" type="destructor">
+      <description summary="stop drawing the window into the surface"/>
+    </request>
+  </interface>
+</protocol>

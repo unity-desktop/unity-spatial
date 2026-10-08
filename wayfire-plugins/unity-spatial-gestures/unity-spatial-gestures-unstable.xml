@@ -1,18 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<protocol name="unity_spatial_gestures_v1">
+<protocol name="unity_spatial_gestures_unstable">
   <copyright>
     Copyright 2026 Muqtadir
 
     SPDX-License-Identifier: GPL-3.0-or-later
   </copyright>
 
-  <interface name="unity_spatial_gestures_v1" version="1">
+  <description summary="touchpad gestures for the shell">
+    The unity-spatial-gestures plugin sends touchpad gestures with three or
+    more fingers to the shell.
+  </description>
+
+  <interface name="zunity_spatial_gestures" version="1">
     <description summary="touchpad gestures for the shell">
       Sends touchpad gestures with three or more fingers to the client,
       wherever the pointer is. The client asks for each gesture that it uses.
       While an object for a gesture exists, the compositor sends that gesture
-      to the object and not to clients through zwp_pointer_gestures_v1. Other
-      gestures go to clients as usual.
+      only to that object, not to clients through zwp_pointer_gestures_v1. It
+      sends all other gestures to clients as usual.
     </description>
 
     <enum name="kind">
@@ -29,15 +34,16 @@
 
     <request name="get_gesture">
       <description summary="get the gestures of a kind with a number of fingers"/>
-      <arg name="id" type="new_id" interface="unity_spatial_gesture_v1"/>
+      <arg name="id" type="new_id" interface="zunity_spatial_gesture"/>
       <arg name="kind" type="uint" enum="kind"/>
       <arg name="fingers" type="uint" summary="number of fingers, 3 or more"/>
     </request>
   </interface>
 
-  <interface name="unity_spatial_gesture_v1" version="1">
+  <interface name="zunity_spatial_gesture" version="1">
     <description summary="touchpad gestures of one kind with one number of fingers">
-      Each gesture is one begin, zero or more update and one end event.
+      The compositor sends one begin event, zero or more update events and
+      one end event for each gesture.
     </description>
 
     <request name="destroy" type="destructor"/>
@@ -59,7 +65,7 @@
 
     <event name="end">
       <arg name="time" type="uint" summary="timestamp in milliseconds"/>
-      <arg name="cancelled" type="int" summary="1 if the gesture was cancelled, else 0"/>
+      <arg name="cancelled" type="int" summary="1 if the touchpad cancelled the gesture, else 0"/>
     </event>
   </interface>
 </protocol>

@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-#include "unity-spatial-gestures-v1-protocol.h"
+#include "unity-spatial-gestures-unstable-protocol.h"
 
 namespace unity_spatial_gestures
 {
@@ -17,21 +17,21 @@ namespace
 {
 constexpr uint32_t MIN_FINGERS = 3;
 
-static_assert(uint32_t(kind::swipe) == UNITY_SPATIAL_GESTURES_V1_KIND_SWIPE);
-static_assert(uint32_t(kind::pinch) == UNITY_SPATIAL_GESTURES_V1_KIND_PINCH);
+static_assert(uint32_t(kind::swipe) == ZUNITY_SPATIAL_GESTURES_KIND_SWIPE);
+static_assert(uint32_t(kind::pinch) == ZUNITY_SPATIAL_GESTURES_KIND_PINCH);
 
 void handle_destroy(wl_client*, wl_resource *resource)
 {
     wl_resource_destroy(resource);
 }
 
-const struct unity_spatial_gesture_v1_interface gesture_impl = {
+const struct zunity_spatial_gesture_interface gesture_impl = {
     .destroy = handle_destroy,
 };
 }
 
 protocol::protocol(wl_display *display) :
-    global(wl_global_create(display, &unity_spatial_gestures_v1_interface, 1, this, bind), wl_global_destroy)
+    global(wl_global_create(display, &zunity_spatial_gestures_interface, 1, this, bind), wl_global_destroy)
 {}
 
 protocol::~protocol()
@@ -51,7 +51,7 @@ void protocol::begin(kind gesture, uint32_t fingers, uint32_t time)
 {
     for (auto *resource : matching(gesture, fingers))
     {
-        unity_spatial_gesture_v1_send_begin(resource, time);
+        zunity_spatial_gesture_send_begin(resource, time);
     }
 }
 
@@ -60,7 +60,7 @@ void protocol::update(kind gesture, uint32_t fingers, uint32_t time, double dx, 
 {
     for (auto *resource : matching(gesture, fingers))
     {
-        unity_spatial_gesture_v1_send_update(resource, time, wl_fixed_from_double(dx), wl_fixed_from_double(dy),
+        zunity_spatial_gesture_send_update(resource, time, wl_fixed_from_double(dx), wl_fixed_from_double(dy),
             wl_fixed_from_double(scale), wl_fixed_from_double(rotation));
     }
 }
@@ -69,7 +69,7 @@ void protocol::end(kind gesture, uint32_t fingers, uint32_t time, bool cancelled
 {
     for (auto *resource : matching(gesture, fingers))
     {
-        unity_spatial_gesture_v1_send_end(resource, time, cancelled);
+        zunity_spatial_gesture_send_end(resource, time, cancelled);
     }
 }
 
@@ -89,12 +89,12 @@ std::vector<wl_resource*> protocol::matching(kind gesture, uint32_t fingers) con
 
 void protocol::bind(wl_client *client, void *data, uint32_t version, uint32_t id)
 {
-    static const struct unity_spatial_gestures_v1_interface gestures_impl = {
+    static const struct zunity_spatial_gestures_interface gestures_impl = {
         .destroy     = handle_destroy,
         .get_gesture = get_gesture,
     };
 
-    auto *resource = wl_resource_create(client, &unity_spatial_gestures_v1_interface, version, id);
+    auto *resource = wl_resource_create(client, &zunity_spatial_gestures_interface, version, id);
     if (!resource)
     {
         wl_client_post_no_memory(client);
@@ -109,18 +109,18 @@ void protocol::get_gesture(wl_client *client, wl_resource *manager, uint32_t id,
 {
     if (gesture > uint32_t(kind::pinch))
     {
-        wl_resource_post_error(manager, UNITY_SPATIAL_GESTURES_V1_ERROR_INVALID_KIND, "unknown kind %u", gesture);
+        wl_resource_post_error(manager, ZUNITY_SPATIAL_GESTURES_ERROR_INVALID_KIND, "unknown kind %u", gesture);
         return;
     }
 
     if (fingers < MIN_FINGERS)
     {
-        wl_resource_post_error(manager, UNITY_SPATIAL_GESTURES_V1_ERROR_INVALID_FINGERS,
+        wl_resource_post_error(manager, ZUNITY_SPATIAL_GESTURES_ERROR_INVALID_FINGERS,
             "fingers must be 3 or more");
         return;
     }
 
-    auto *resource = wl_resource_create(client, &unity_spatial_gesture_v1_interface,
+    auto *resource = wl_resource_create(client, &zunity_spatial_gesture_interface,
         wl_resource_get_version(manager), id);
     if (!resource)
     {
