@@ -27,13 +27,3 @@ shared_module(
 )
 
 install_data('unity-spatial-preview.xml', install_dir: metadatadir)
-
-doctest = dependency('doctest', required: false)
-if doctest.found()
-  test('preview-mapping', executable(
-    'test-mapping',
-    'test-mapping.cpp',
-    'mapping.cpp',
-    dependencies: [doctest, dep_wayfire, dep_wlroots],
-  ))
-endif

@@ -186,7 +186,6 @@ apply (UnitySpatialWayfire *self,
   g_autoptr (GPtrArray)   found   = g_ptr_array_new ();
   g_autoptr (GArray)      windows = g_array_new (FALSE, FALSE, sizeof (UnitySpatialWindowState));
   g_autoptr (GHashTable)  ranks   = read_stacking (stacking);
-  guint                   desktop = 0;
 
   for (guint i = 0; i < json_array_get_length (views); i++)
     {
@@ -195,7 +194,7 @@ apply (UnitySpatialWayfire *self,
       if (is_window (view, self->output_id))
         g_ptr_array_add (found, view);
       else if (is_desktop (view, self->output_id))
-        desktop = json_object_get_int_member (view, "id");
+        output.desktop_view_id = json_object_get_int_member (view, "id");
     }
 
   g_ptr_array_sort_with_data (found, by_stacking, ranks);
@@ -208,7 +207,7 @@ apply (UnitySpatialWayfire *self,
     }
 
   unity_spatial_workspace_view_update (self->workspaces, &output);
-  unity_spatial_window_view_update (self->windows, windows, desktop);
+  unity_spatial_window_view_update (self->windows, windows);
 }
 
 static gboolean
@@ -316,8 +315,8 @@ static void
 unity_spatial_wayfire_init (UnitySpatialWayfire *self)
 {
   self->ipc        = unity_spatial_ipc_new ();
-  self->windows    = unity_spatial_window_view_new (self);
-  self->workspaces = unity_spatial_workspace_view_new (self);
+  self->windows    = g_object_new (UNITY_SPATIAL_TYPE_WINDOW_VIEW, NULL);
+  self->workspaces = g_object_new (UNITY_SPATIAL_TYPE_WORKSPACE_VIEW, NULL);
   self->output_id  = -1;
 }
 
