@@ -13,11 +13,12 @@ preview_protocol = [
 
 shared_module(
   'unity-spatial-preview',
+  'ipc.cpp',
+  'mapping.cpp',
   'plugin.cpp',
   'preview.cpp',
   'preview-node.cpp',
   'protocol.cpp',
-  'stacking.cpp',
   preview_protocol,
   name_prefix: 'lib',
   dependencies: [dep_wayfire, dep_wfconfig, dep_wlroots, dep_wlserver],
@@ -26,3 +27,13 @@ shared_module(
 )
 
 install_data('unity-spatial-preview.xml', install_dir: metadatadir)
+
+doctest = dependency('doctest', required: false)
+if doctest.found()
+  test('preview-mapping', executable(
+    'test-mapping',
+    'test-mapping.cpp',
+    'mapping.cpp',
+    dependencies: [doctest, dep_wayfire, dep_wlroots],
+  ))
+endif

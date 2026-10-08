@@ -26,20 +26,8 @@ void handle_destroy(wl_client*, wl_resource *resource)
     wl_resource_destroy(resource);
 }
 
-void handle_set_alpha(wl_client*, wl_resource *resource, wl_fixed_t alpha)
-{
-    if ((alpha < 0) || (alpha > wl_fixed_from_int(1)))
-    {
-        wl_resource_post_error(resource, UNITY_PREVIEW_V1_ERROR_INVALID_ALPHA, "alpha must be from 0 to 1");
-        return;
-    }
-
-    from_resource(resource)->set_alpha(float(wl_fixed_to_double(alpha)));
-}
-
 const struct unity_preview_v1_interface preview_impl = {
-    .set_alpha = handle_set_alpha,
-    .destroy   = handle_destroy,
+    .destroy = handle_destroy,
 };
 
 void destroy_preview(wl_resource *resource)
@@ -47,9 +35,17 @@ void destroy_preview(wl_resource *resource)
     delete from_resource(resource);
 }
 
-void handle_get_preview(wl_client *client, wl_resource *manager, uint32_t id, wl_resource *surface,
+void handle_get_preview(wl_client *client, wl_resource *manager, uint32_t id, wl_resource *surface_resource,
     uint32_t view_id)
 {
+    auto *subsurface = wlr_subsurface_try_from_wlr_surface(wlr_surface_from_resource(surface_resource));
+    if (!subsurface)
+    {
+        wl_resource_post_error(manager, UNITY_PREVIEW_MANAGER_V1_ERROR_INVALID_SURFACE,
+            "the surface is not a subsurface");
+        return;
+    }
+
     auto *resource = wl_resource_create(client, &unity_preview_v1_interface,
         wl_resource_get_version(manager), id);
     if (!resource)
@@ -58,10 +54,9 @@ void handle_get_preview(wl_client *client, wl_resource *manager, uint32_t id, wl
         return;
     }
 
-    auto closed = [resource] { unity_preview_v1_send_closed(resource); };
-    wl_resource_set_implementation(resource, &preview_impl,
-        new preview(wlr_surface_from_resource(surface), wf::ipc::find_view_by_id(view_id), closed),
-        destroy_preview);
+    auto view = wf::ipc::find_view_by_id(view_id);
+    auto *target = (view && view->is_mapped()) ? new preview(subsurface, view) : nullptr;
+    wl_resource_set_implementation(resource, &preview_impl, target, destroy_preview);
 }
 
 const struct unity_preview_manager_v1_interface manager_impl = {

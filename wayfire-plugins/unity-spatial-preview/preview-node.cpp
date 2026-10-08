@@ -7,6 +7,7 @@
 
 #include "preview-node.hpp"
 
+#include <wayfire/scene-operations.hpp>
 #include <wayfire/toplevel-view.hpp>
 
 namespace unity_spatial_preview
@@ -47,9 +48,22 @@ class preview_instance_t : public wf::scene::simple_render_instance_t<preview_no
 
     void render(const wf::scene::render_instruction_t& data) override
     {
+        auto mapping = self->mapping();
+        if (!mapping)
+        {
+            return;
+        }
+
         auto texture = source_texture(data.target.scale);
+        auto bounds  = source_root->get_bounding_box();
+        auto base    = texture->get_source_box().value_or(wlr_fbox{0, 0, double(texture->get_width()),
+            double(texture->get_height())});
+        double kx = base.width / bounds.width;
+        double ky = base.height / bounds.height;
+        texture->set_source_box(wlr_fbox{base.x + mapping->source.x * kx, base.y + mapping->source.y * ky,
+            mapping->source.width * kx, mapping->source.height * ky});
         texture->set_filter_mode(WLR_SCALE_FILTER_BILINEAR);
-        data.pass->add_texture(texture, data.target, texture_rect(), data.damage, self->alpha);
+        data.pass->add_texture(texture, data.target, mapping->box, data.damage);
     }
 
     void presentation_feedback(wf::output_t *output) override
@@ -67,24 +81,6 @@ class preview_instance_t : public wf::scene::simple_render_instance_t<preview_no
     }
 
   private:
-    wf::geometry_t texture_rect()
-    {
-        auto rect   = self->get_bounding_box();
-        auto bounds = source_root->get_bounding_box();
-        auto view   = self->source.lock();
-        auto frame  = view ? frame_of(view.get()) : bounds;
-
-        if ((frame.width <= 0) || (frame.height <= 0))
-        {
-            return rect;
-        }
-
-        double sx = rect.width / frame.width;
-        double sy = rect.height / frame.height;
-        return {rect.x - (frame.x - bounds.x) * sx, rect.y - (frame.y - bounds.y) * sy,
-            bounds.width * sx, bounds.height * sy};
-    }
-
     void regen_source_instances()
     {
         children.clear();
@@ -93,15 +89,24 @@ class preview_instance_t : public wf::scene::simple_render_instance_t<preview_no
             self->cached_damage |= damage;
             push_damage(self->get_bounding_box());
         }, output);
+
+        direct = zero_copy() != nullptr;
+        if (direct)
+        {
+            self->release_buffers();
+        }
+    }
+
+    std::shared_ptr<wf::texture_t> zero_copy() const
+    {
+        auto *single = dynamic_cast<wf::scene::zero_copy_texturable_node_t*>(source_root.get());
+        return single ? single->to_texture() : nullptr;
     }
 
     std::shared_ptr<wf::texture_t> source_texture(float scale)
     {
-        auto *single = dynamic_cast<wf::scene::zero_copy_texturable_node_t*>(source_root.get());
-        auto texture = single ? single->to_texture() : nullptr;
-        if (texture && !texture->get_wait_timeline())
+        if (auto texture = direct ? zero_copy() : nullptr)
         {
-            self->release_buffers();
             return texture;
         }
 
@@ -110,6 +115,7 @@ class preview_instance_t : public wf::scene::simple_render_instance_t<preview_no
 
     wf::scene::floating_inner_ptr source_root;
     std::vector<wf::scene::render_instance_uptr> children;
+    bool direct = false;
 
     wf::signal::connection_t<wf::scene::node_regen_instances_signal> on_source_regen = [this] (auto)
     {
@@ -118,25 +124,45 @@ class preview_instance_t : public wf::scene::simple_render_instance_t<preview_no
 };
 }
 
-preview_node_t::preview_node_t(wayfire_view source, wlr_surface *surface) :
-    transformer_base_node_t(false), source(source->weak_from_this()), surface(surface)
+preview_node_t::preview_node_t(wayfire_view source, wlr_subsurface *subsurface) :
+    transformer_base_node_t(false), source(source->weak_from_this()), subsurface(subsurface)
 {}
+
+std::optional<mapping_t> preview_node_t::mapping()
+{
+    auto view = source.lock();
+    if (!view)
+    {
+        return std::nullopt;
+    }
+
+    return map_window(frame_of(view), view->get_surface_root_node()->get_bounding_box(),
+        subsurface->surface->current.width, subsurface->surface->current.height);
+}
 
 wf::geometry_t preview_node_t::get_bounding_box()
 {
-    return {0, 0, double(surface->current.width), double(surface->current.height)};
+    if (auto current = mapping())
+    {
+        return current->box;
+    }
+
+    return {0, 0, double(subsurface->surface->current.width), double(subsurface->surface->current.height)};
+}
+
+void preview_node_t::refresh()
+{
+    auto box = get_bounding_box();
+    wf::regionf_t damage{last_box};
+    damage |= box;
+    last_box = box;
+    wf::scene::damage_node(shared_from_this(), damage);
 }
 
 wf::geometry_t preview_node_t::get_clip() const
 {
-    auto *sub = wlr_subsurface_try_from_wlr_surface(surface);
-    if (!sub || !sub->parent)
-    {
-        return {0, 0, double(surface->current.width), double(surface->current.height)};
-    }
-
-    return {-double(sub->current.x), -double(sub->current.y),
-        double(sub->parent->current.width), double(sub->parent->current.height)};
+    return {-double(subsurface->current.x), -double(subsurface->current.y),
+        double(subsurface->parent->current.width), double(subsurface->parent->current.height)};
 }
 
 void preview_node_t::gen_render_instances(std::vector<wf::scene::render_instance_uptr>& instances,

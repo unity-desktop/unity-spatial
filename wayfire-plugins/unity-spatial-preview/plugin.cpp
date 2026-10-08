@@ -11,7 +11,7 @@
 #include <wayfire/plugin.hpp>
 
 #include "protocol.hpp"
-#include "stacking.hpp"
+#include "ipc.hpp"
 
 namespace unity_spatial_preview
 {
@@ -21,7 +21,7 @@ class plugin : public wf::plugin_interface_t
     void init() override
     {
         wayland = std::make_unique<protocol>(wf::get_core().display);
-        ipc     = std::make_unique<stacking_ipc>();
+        ipc     = std::make_unique<ipc_methods>();
     }
 
     void fini() override
@@ -37,7 +37,7 @@ class plugin : public wf::plugin_interface_t
 
   private:
     std::unique_ptr<protocol> wayland;
-    std::unique_ptr<stacking_ipc> ipc;
+    std::unique_ptr<ipc_methods> ipc;
 };
 }
 

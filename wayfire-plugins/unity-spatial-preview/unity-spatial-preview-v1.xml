@@ -13,12 +13,20 @@
       (wl_subsurface, wp_viewport); the compositor only draws the window.
     </description>
 
+    <enum name="error">
+      <entry name="invalid_surface" value="0" summary="the surface is not a subsurface"/>
+    </enum>
+
     <request name="get_preview">
       <description summary="draw a window into a surface">
-        The compositor draws the window frame, without its client-side shadow,
-        scaled to the size of the surface, above the surface's own content and
-        clipped to the parent surface. If the window does not exist or is not
-        mapped, the compositor sends closed at once.
+        The surface must have the wl_subsurface role. The compositor scales the window so that its frame
+        fills the surface, and draws it above the surface's own content,
+        clipped to the parent surface. The window's client-side shadow draws
+        around the surface. Drawing starts after the parent surface commits the
+        subsurface, and follows the surface's mapped state: attach a null
+        buffer to hide the window, attach a buffer to show it again. If the
+        window does not exist, is not mapped, or unmaps later, the surface
+        shows nothing more.
       </description>
       <arg name="id" type="new_id" interface="unity_preview_v1"/>
       <arg name="surface" type="object" interface="wl_surface"/>
@@ -29,23 +37,6 @@
   </interface>
 
   <interface name="unity_preview_v1" version="1">
-    <enum name="error">
-      <entry name="invalid_alpha" value="0" summary="alpha is outside 0 to 1"/>
-    </enum>
-
-    <request name="set_alpha">
-      <description summary="opacity of the window">
-        Applied on the next commit of the surface. Initial value 1.
-      </description>
-      <arg name="alpha" type="fixed"/>
-    </request>
-
-    <event name="closed">
-      <description summary="the window was unmapped">
-        No more events follow; the compositor stops drawing into the surface.
-      </description>
-    </event>
-
     <request name="destroy" type="destructor"/>
   </interface>
 </protocol>

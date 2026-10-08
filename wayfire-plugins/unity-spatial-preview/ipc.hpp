@@ -1,4 +1,4 @@
-/* stacking.hpp
+/* ipc.hpp
  *
  * Copyright 2026 Muqtadir
  *
@@ -12,14 +12,14 @@
 
 namespace unity_spatial_preview
 {
-class stacking_ipc
+class ipc_methods
 {
   public:
-    stacking_ipc();
-    ~stacking_ipc();
+    ipc_methods();
+    ~ipc_methods();
 
-    stacking_ipc(const stacking_ipc&) = delete;
-    stacking_ipc& operator =(const stacking_ipc&) = delete;
+    ipc_methods(const ipc_methods&) = delete;
+    ipc_methods& operator =(const ipc_methods&) = delete;
 
   private:
     wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> repository;
