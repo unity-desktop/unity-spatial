@@ -58,6 +58,7 @@ attach (UnitySpatialPreviewMirror *self)
   self->shown      = FALSE;
 
   wl_surface_set_input_region (self->surface, globals->empty_region);
+  wl_subsurface_place_below (self->subsurface, parent);
 
   self->stack = unity_spatial_mirror_stack_get_for_native (native);
   unity_spatial_mirror_stack_add (self->stack, self);
@@ -146,10 +147,10 @@ unity_spatial_preview_mirror_sync (UnitySpatialPreviewMirror *self)
 }
 
 void
-unity_spatial_preview_mirror_place_above (UnitySpatialPreviewMirror *self,
+unity_spatial_preview_mirror_place_below (UnitySpatialPreviewMirror *self,
                                           struct wl_surface         *parent)
 {
-  wl_subsurface_place_above (self->subsurface, parent);
+  wl_subsurface_place_below (self->subsurface, parent);
 }
 
 static void
@@ -172,8 +173,13 @@ static void
 unity_spatial_preview_mirror_snapshot (GtkWidget   *widget,
                                        GtkSnapshot *snapshot)
 {
-  gtk_snapshot_append_color (snapshot, &(GdkRGBA) { 0, 0, 0, 0 },
-                             &GRAPHENE_RECT_INIT (0, 0, gtk_widget_get_width (widget), gtk_widget_get_height (widget)));
+  graphene_rect_t bounds = GRAPHENE_RECT_INIT (0, 0, gtk_widget_get_width (widget), gtk_widget_get_height (widget));
+
+  gtk_snapshot_push_composite (snapshot, GSK_PORTER_DUFF_CLEAR);
+  gtk_snapshot_append_color (snapshot, &(GdkRGBA) { 0, 0, 0, 1 }, &bounds);
+  gtk_snapshot_pop (snapshot);
+  gtk_snapshot_append_color (snapshot, &(GdkRGBA) { 0, 0, 0, 1 }, &bounds);
+  gtk_snapshot_pop (snapshot);
 }
 
 static void

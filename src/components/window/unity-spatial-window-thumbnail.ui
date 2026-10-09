@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <template class="UnitySpatialWindowThumbnail" parent="GtkWidget">
+    <property name="layout-manager">
+      <object class="GtkBinLayout"/>
+    </property>
+    <child>
+      <object class="GtkButton" id="card">
+        <property name="css-name">windowcard</property>
+        <signal name="clicked" handler="card_clicked_cb" swapped="true"/>
+        <property name="child">
+          <object class="UnitySpatialPreviewMirror" id="preview"/>
+        </property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkLabel" id="title">
+        <property name="halign">start</property>
+        <property name="valign">start</property>
+        <property name="margin-top">6</property>
+        <property name="margin-start">6</property>
+        <property name="ellipsize">end</property>
+        <property name="single-line-mode">True</property>
+        <property name="can-target">False</property>
+        <style>
+          <class name="caption"/>
+          <class name="osd"/>
+          <class name="toolbar"/>
+        </style>
+      </object>
+    </child>
+    <child>
+      <object class="GtkButton" id="close_button">
+        <property name="halign">end</property>
+        <property name="valign">start</property>
+        <property name="margin-top">6</property>
+        <property name="margin-end">6</property>
+        <property name="can-focus">False</property>
+        <property name="icon-name">window-close-symbolic</property>
+        <accessibility>
+          <property name="label">Close</property>
+        </accessibility>
+        <style>
+          <class name="circular"/>
+          <class name="osd"/>
+          <class name="close"/>
+        </style>
+        <signal name="clicked" handler="close_clicked_cb" swapped="true"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="halign">center</property>
+        <property name="valign">end</property>
+        <property name="margin-bottom">12</property>
+        <property name="can-target">False</property>
+        <style>
+          <class name="card"/>
+          <class name="badge"/>
+        </style>
+        <child>
+          <object class="GtkImage" id="icon">
+            <property name="margin-top">12</property>
+            <property name="margin-bottom">12</property>
+            <property name="margin-start">12</property>
+            <property name="margin-end">12</property>
+            <property name="pixel-size">64</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>

@@ -68,8 +68,8 @@ restack (UnitySpatialMirrorStack *self)
     return FALSE;
 
   parent = gdk_wayland_surface_get_wl_surface (gtk_native_get_surface (self->native));
-  for (guint i = ordered->len; i-- > 0;)
-    unity_spatial_preview_mirror_place_above (g_ptr_array_index (ordered, i), parent);
+  for (guint i = 0; i < ordered->len; i++)
+    unity_spatial_preview_mirror_place_below (g_ptr_array_index (ordered, i), parent);
 
   g_ptr_array_unref (self->mirrors);
   self->mirrors = g_steal_pointer (&ordered);
