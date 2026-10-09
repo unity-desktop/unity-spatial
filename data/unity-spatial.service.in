@@ -1,0 +1,12 @@
+[Unit]
+Description=Unity Spatial
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.unity.Spatial
+ExecStart=@UNITY_SPATIAL_BIN@
+Restart=always
+
+[Install]
+WantedBy=unity-session.target
