@@ -21,10 +21,4 @@ GtkWidget                 *unity_spatial_workspace_thumbnail_new           (Unit
 
 UnitySpatialWorkspacePage *unity_spatial_workspace_thumbnail_get_workspace (UnitySpatialWorkspaceThumbnail *self);
 
-void                       unity_spatial_workspace_thumbnail_set_morph     (UnitySpatialWorkspaceThumbnail *self,
-                                                                       gdouble                    morph);
-
-void                       unity_spatial_workspace_thumbnail_set_wall      (UnitySpatialWorkspaceThumbnail *self,
-                                                                       gboolean                   wall);
-
 G_END_DECLS

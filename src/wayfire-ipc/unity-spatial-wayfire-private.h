@@ -32,6 +32,9 @@ void                       unity_spatial_wayfire_focus_view         (UnitySpatia
 void                       unity_spatial_wayfire_close_view         (UnitySpatialWayfire *self,
                                                                      guint                view_id);
 
+void                       unity_spatial_wayfire_set_active         (UnitySpatialWayfire *self,
+                                                                     gboolean             active);
+
 void                       unity_spatial_wayfire_send_view          (UnitySpatialWayfire *self,
                                                                      guint                view_id,
                                                                      gint                 x,

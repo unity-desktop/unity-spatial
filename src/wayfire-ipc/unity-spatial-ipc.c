@@ -9,14 +9,19 @@
 
 #include <gio/gunixsocketaddress.h>
 
-#define LENGTH_SIZE 4
+#define LENGTH_SIZE     4
+#define RECONNECT_FIRST 1
+#define RECONNECT_LAST  30
 
 struct _UnitySpatialIpc
 {
   GObject parent_instance;
 
-  GSocketAddress *address;
-  GCancellable   *cancellable;
+  GSocketAddress    *address;
+  GCancellable      *cancellable;
+  GSocketConnection *connection;
+  GQueue             calls;
+  gboolean           draining;
 };
 
 G_DEFINE_FINAL_TYPE (UnitySpatialIpc, unity_spatial_ipc, G_TYPE_OBJECT)
@@ -31,15 +36,16 @@ static guint signals[N_SIGNALS];
 
 typedef struct
 {
-  GSocketAddress *address;
-  GBytes         *message;
-} Request;
+  GBytes     *message;
+  DexPromise *promise;
+} Call;
 
 typedef struct
 {
-  Request       request;
-  GWeakRef      owner;
-  GCancellable *cancellable;
+  GSocketAddress *address;
+  GBytes         *message;
+  GWeakRef        owner;
+  GCancellable   *cancellable;
 } Watch;
 
 static GBytes *
@@ -68,39 +74,11 @@ encode (const gchar *method,
 }
 
 static void
-request_init (Request         *request,
-              UnitySpatialIpc *self,
-              const gchar     *method,
-              JsonObject      *data)
+call_free (Call *call)
 {
-  request->address = g_object_ref (self->address);
-  request->message = encode (method, data);
-}
-
-static void
-request_clear (Request *request)
-{
-  g_clear_object (&request->address);
-  g_clear_pointer (&request->message, g_bytes_unref);
-}
-
-static Request *
-request_new (UnitySpatialIpc *self,
-             const gchar     *method,
-             JsonObject      *data)
-{
-  Request *request = g_new0 (Request, 1);
-
-  request_init (request, self, method, data);
-
-  return request;
-}
-
-static void
-request_free (Request *request)
-{
-  request_clear (request);
-  g_free (request);
+  g_clear_pointer (&call->message, g_bytes_unref);
+  dex_clear (&call->promise);
+  g_free (call);
 }
 
 static Watch *
@@ -109,7 +87,8 @@ watch_new (UnitySpatialIpc *self,
 {
   Watch *watch = g_new0 (Watch, 1);
 
-  request_init (&watch->request, self, "window-rules/events/watch", data);
+  watch->address = g_object_ref (self->address);
+  watch->message = encode ("window-rules/events/watch", data);
   g_weak_ref_init (&watch->owner, self);
   watch->cancellable = g_object_ref (self->cancellable);
 
@@ -119,7 +98,8 @@ watch_new (UnitySpatialIpc *self,
 static void
 watch_free (Watch *watch)
 {
-  request_clear (&watch->request);
+  g_clear_object (&watch->address);
+  g_clear_pointer (&watch->message, g_bytes_unref);
   g_weak_ref_clear (&watch->owner);
   g_clear_object (&watch->cancellable);
   g_free (watch);
@@ -216,7 +196,7 @@ exchange (GSocketConnection  *connection,
   object = json_node_get_object (reply);
   if (json_object_has_member (object, "error"))
     {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "%s",
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT, "%s",
                    json_object_get_string_member_with_default (object, "error", ""));
       json_node_unref (reply);
       return NULL;
@@ -234,57 +214,109 @@ connect_to (GSocketAddress  *address,
   return dex_await_object (dex_socket_client_connect (client, G_SOCKET_CONNECTABLE (address)), error);
 }
 
-static DexFuture *
-call_fiber (gpointer user_data)
+static JsonNode *
+send_call (UnitySpatialIpc  *self,
+           GBytes           *message,
+           GError          **error)
 {
-  Request                      *request    = user_data;
-  g_autoptr (GError)            error      = NULL;
-  g_autoptr (GSocketConnection) connection = connect_to (request->address, &error);
-  JsonNode                     *reply      = NULL;
+  for (gint attempt = 0; attempt < 2; attempt++)
+    {
+      JsonNode *reply;
 
-  if (connection != NULL)
-    reply = exchange (connection, request->message, NULL, &error);
+      g_clear_error (error);
+      if (self->connection == NULL)
+        self->connection = connect_to (self->address, error);
+      if (self->connection == NULL)
+        return NULL;
 
-  if (reply == NULL)
-    return dex_future_new_for_error (g_steal_pointer (&error));
+      reply = exchange (self->connection, message, self->cancellable, error);
+      if (reply != NULL || g_error_matches (*error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT) ||
+          g_error_matches (*error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+        return reply;
 
-  return dex_future_new_take_boxed (JSON_TYPE_NODE, reply);
+      g_clear_object (&self->connection);
+    }
+
+  return NULL;
+}
+
+static DexFuture *
+drain_fiber (gpointer user_data)
+{
+  UnitySpatialIpc *self = user_data;
+  Call            *call;
+
+  while ((call = g_queue_pop_head (&self->calls)) != NULL)
+    {
+      g_autoptr (GError) error = NULL;
+      JsonNode          *reply = send_call (self, call->message, &error);
+
+      if (reply != NULL)
+        dex_promise_resolve_boxed (call->promise, JSON_TYPE_NODE, reply);
+      else
+        dex_promise_reject (call->promise, g_steal_pointer (&error));
+      call_free (call);
+    }
+
+  self->draining = FALSE;
+
+  return dex_future_new_true ();
 }
 
 static void
-emit_event (Watch *watch)
+emit_event (Watch      *watch,
+            JsonNode   *event)
 {
   g_autoptr (UnitySpatialIpc) self = g_weak_ref_get (&watch->owner);
+  const gchar                *name = NULL;
+
+  if (event != NULL && JSON_NODE_HOLDS_OBJECT (event))
+    name = json_object_get_string_member_with_default (json_node_get_object (event), "event", NULL);
 
   if (self != NULL)
-    g_signal_emit (self, signals[SIGNAL_EVENT], 0);
+    g_signal_emit (self, signals[SIGNAL_EVENT], 0, name);
 }
 
 static DexFuture *
 watch_fiber (gpointer user_data)
 {
-  Watch                        *watch      = user_data;
-  g_autoptr (GError)            error      = NULL;
-  g_autoptr (GSocketConnection) connection = connect_to (watch->request.address, &error);
-  g_autoptr (JsonNode)          reply      = NULL;
+  Watch *watch = user_data;
+  gint   delay = RECONNECT_FIRST;
 
-  if (connection != NULL)
-    reply = exchange (connection, watch->request.message, watch->cancellable, &error);
-
-  while (reply != NULL)
+  while (!g_cancellable_is_cancelled (watch->cancellable))
     {
-      g_autoptr (JsonNode) event = read_message (connection, watch->cancellable, &error);
+      g_autoptr (GError)            error      = NULL;
+      g_autoptr (GSocketConnection) connection = connect_to (watch->address, &error);
+      g_autoptr (JsonNode)          reply      = NULL;
 
-      if (event == NULL)
+      if (connection != NULL)
+        reply = exchange (connection, watch->message, watch->cancellable, &error);
+
+      if (reply != NULL)
+        {
+          delay = RECONNECT_FIRST;
+          emit_event (watch, NULL);
+        }
+
+      while (reply != NULL)
+        {
+          g_autoptr (JsonNode) event = read_message (connection, watch->cancellable, &error);
+
+          if (event == NULL)
+            break;
+
+          emit_event (watch, event);
+        }
+
+      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
         break;
 
-      emit_event (watch);
+      g_warning ("Wayfire IPC events stopped, retrying in %d s: %s", delay, error->message);
+      dex_await (until_cancelled (dex_timeout_new_seconds (delay), watch->cancellable), NULL);
+      delay = MIN (delay * 2, RECONNECT_LAST);
     }
 
-  if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
-    g_warning ("Wayfire IPC events stopped: %s", error->message);
-
-  return dex_future_new_for_error (g_steal_pointer (&error));
+  return dex_future_new_true ();
 }
 
 static void
@@ -293,6 +325,8 @@ unity_spatial_ipc_dispose (GObject *object)
   UnitySpatialIpc *self = UNITY_SPATIAL_IPC (object);
 
   g_cancellable_cancel (self->cancellable);
+  g_queue_clear_full (&self->calls, (GDestroyNotify) call_free);
+  g_clear_object (&self->connection);
   g_clear_object (&self->cancellable);
   g_clear_object (&self->address);
 
@@ -307,7 +341,8 @@ unity_spatial_ipc_class_init (UnitySpatialIpcClass *klass)
   object_class->dispose = unity_spatial_ipc_dispose;
 
   signals[SIGNAL_EVENT] =
-    g_signal_new ("event", G_TYPE_FROM_CLASS (klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    g_signal_new ("event", G_TYPE_FROM_CLASS (klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1,
+                  G_TYPE_STRING);
 
   dex_init ();
 }
@@ -336,13 +371,26 @@ unity_spatial_ipc_call (UnitySpatialIpc *self,
                         const gchar     *method,
                         JsonObject      *data)
 {
+  Call *call;
+
   g_return_val_if_fail (UNITY_SPATIAL_IS_IPC (self), NULL);
   g_return_val_if_fail (method != NULL, NULL);
 
   if (self->address == NULL)
     return dex_future_new_reject (G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "Neither _WAYFIRE_SOCKET nor WAYFIRE_SOCKET is set");
 
-  return dex_scheduler_spawn (NULL, 0, call_fiber, request_new (self, method, data), (GDestroyNotify) request_free);
+  call          = g_new0 (Call, 1);
+  call->message = encode (method, data);
+  call->promise = dex_promise_new ();
+  g_queue_push_tail (&self->calls, call);
+
+  if (!self->draining)
+    {
+      self->draining = TRUE;
+      dex_future_disown (dex_scheduler_spawn (NULL, 0, drain_fiber, g_object_ref (self), g_object_unref));
+    }
+
+  return dex_ref (call->promise);
 }
 
 void

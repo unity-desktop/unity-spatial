@@ -19,20 +19,17 @@ G_DECLARE_FINAL_TYPE (UnitySpatialCarousel, unity_spatial_carousel, UNITY_SPATIA
 
 UnitySpatialWorkspaceThumbnail *unity_spatial_carousel_get_current (UnitySpatialCarousel *self);
 
-void                       unity_spatial_carousel_set_progress     (UnitySpatialCarousel *self,
-                                                                      gdouble                 progress);
+gdouble                         unity_spatial_carousel_get_position (UnitySpatialCarousel *self,
+                                                                     GtkOrientation        axis);
 
-gdouble                    unity_spatial_carousel_get_position     (UnitySpatialCarousel *self,
-                                                                      GtkOrientation          axis);
+void                            unity_spatial_carousel_begin_swipe  (UnitySpatialCarousel *self,
+                                                                     GtkOrientation        axis);
 
-void                       unity_spatial_carousel_begin_swipe      (UnitySpatialCarousel *self,
-                                                                      GtkOrientation          axis);
+void                            unity_spatial_carousel_update_swipe (UnitySpatialCarousel *self,
+                                                                     gdouble               progress);
 
-void                       unity_spatial_carousel_update_swipe     (UnitySpatialCarousel *self,
-                                                                      gdouble                 progress);
-
-void                       unity_spatial_carousel_end_swipe        (UnitySpatialCarousel *self,
-                                                                      gdouble                 velocity,
-                                                                      gdouble                 to);
+void                            unity_spatial_carousel_end_swipe    (UnitySpatialCarousel *self,
+                                                                     gdouble               velocity,
+                                                                     gdouble               to);
 
 G_END_DECLS

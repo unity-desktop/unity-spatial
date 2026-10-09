@@ -72,7 +72,7 @@ main (gint   argc,
   if (g_getenv ("WAYLAND_DISPLAY") != NULL)
     g_setenv ("GDK_BACKEND", "wayland", TRUE);
 
-  app = adw_application_new ("org.unity.Spatial", G_APPLICATION_DEFAULT_FLAGS);
+  app = adw_application_new ("org.unity.Spatial", G_APPLICATION_CAN_OVERRIDE_APP_ID);
   g_signal_connect (app, "startup", G_CALLBACK (startup_cb), NULL);
   g_signal_connect (app, "activate", G_CALLBACK (activate_cb), NULL);
 

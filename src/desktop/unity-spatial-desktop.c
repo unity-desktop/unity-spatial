@@ -19,10 +19,12 @@
 #include "unity-spatial-wayfire-private.h"
 #include "unity-spatial-workspace-view.h"
 
-#define PAGE_FINGERS  3
-#define SLIDE_FINGERS 4
-#define PINCH_SCALE   0.25
-#define AXIS_LOCK     8
+#define PAGE_FINGERS             3
+#define SLIDE_FINGERS            4
+#define PINCH_SCALE              0.25
+#define AXIS_LOCK                8
+#define TOUCHPAD_BASE_DISTANCE_H 400
+#define TOUCHPAD_BASE_DISTANCE_V 300
 
 struct _UnitySpatialDesktop
 {
@@ -34,12 +36,12 @@ struct _UnitySpatialDesktop
   GPtrArray                *wallpapers;
   UnitySpatialViewWindow   *window;
   UnitySpatialSwipeTracker *swipe;
-  gboolean                  swipe_pending;
   UnitySpatialSwipeTracker *slide;
   GtkOrientation            slide_axis;
   gboolean                  sliding;
   gdouble                   slide_x;
   gdouble                   slide_y;
+  gboolean                  swipe_pending;
   UnitySpatialGesture      *page_swipe;
   UnitySpatialGesture      *page_pinch;
   UnitySpatialGesture      *slide_swipe;
@@ -100,6 +102,7 @@ hide_window (UnitySpatialDesktop *self)
   self->sliding = FALSE;
   unity_spatial_view_set_progress (view_of (self), UNITY_SPATIAL_PAGE_DESKTOP);
   gtk_widget_set_visible (GTK_WIDGET (self->window), FALSE);
+  unity_spatial_wayfire_set_active (unity_spatial_wayfire_get_default (), FALSE);
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_VIEW_VISIBLE]);
 }
 
@@ -131,7 +134,7 @@ show_window (UnitySpatialDesktop *self)
   if (monitor == NULL)
     return FALSE;
 
-  unity_spatial_wayfire_refresh (unity_spatial_wayfire_get_default ());
+  unity_spatial_wayfire_set_active (unity_spatial_wayfire_get_default (), TRUE);
 
   if (self->window != NULL && unity_window_get_gdkmonitor (UNITY_WINDOW (self->window)) != monitor)
     destroy_window (self);
@@ -156,7 +159,8 @@ start_page_swipe (UnitySpatialDesktop *self)
   gdouble from = unity_spatial_view_get_progress (view_of (self));
 
   self->swipe = unity_spatial_swipe_tracker_new (from, MAX (UNITY_SPATIAL_PAGE_DESKTOP, round (from) - 1),
-                                                 MIN (UNITY_SPATIAL_PAGE_WORKSPACES, round (from) + 1));
+                                                 MIN (UNITY_SPATIAL_PAGE_WORKSPACES, round (from) + 1),
+                                                 TOUCHPAD_BASE_DISTANCE_V);
   unity_spatial_view_begin_swipe (view_of (self));
 }
 
@@ -272,7 +276,9 @@ slide_swipe_update_cb (UnitySpatialDesktop *self,
       pages            = self->slide_axis == GTK_ORIENTATION_HORIZONTAL ? unity_spatial_workspace_view_get_grid_width (view)
                                                                         : unity_spatial_workspace_view_get_grid_height (view);
       position         = unity_spatial_carousel_get_position (carousel, self->slide_axis);
-      self->slide      = unity_spatial_swipe_tracker_new (position, MAX (position - 1, 0), MIN (position + 1, pages - 1));
+      self->slide      = unity_spatial_swipe_tracker_new (position, MAX (position - 1, 0), MIN (position + 1, pages - 1),
+                                                         self->slide_axis == GTK_ORIENTATION_HORIZONTAL ? TOUCHPAD_BASE_DISTANCE_H
+                                                                                                        : TOUCHPAD_BASE_DISTANCE_V);
       unity_spatial_carousel_begin_swipe (carousel, self->slide_axis);
       dx = -self->slide_x;
       dy = -self->slide_y;
@@ -372,6 +378,7 @@ unity_spatial_desktop_set_property (GObject      *object,
       unity_spatial_desktop_set_page (self, g_value_get_enum (value));
       break;
     case PROP_VIEW_VISIBLE:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
     }
 }
@@ -433,7 +440,7 @@ unity_spatial_desktop_new (GtkApplication *app)
   self->page_swipe  = unity_spatial_gesture_new_swipe (PAGE_FINGERS);
   self->page_pinch  = unity_spatial_gesture_new_pinch (PAGE_FINGERS);
   self->slide_swipe = unity_spatial_gesture_new_swipe (SLIDE_FINGERS);
-  unity_spatial_wayfire_get_default ();
+  unity_spatial_wayfire_set_active (unity_spatial_wayfire_get_default (), FALSE);
 
   connect_gesture (self, self->page_swipe, G_CALLBACK (page_swipe_begin_cb), G_CALLBACK (page_swipe_update_cb),
                    G_CALLBACK (page_swipe_end_cb));

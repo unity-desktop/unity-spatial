@@ -27,6 +27,7 @@ struct _UnitySpatialWayfire
   guint                      generation;
   gboolean                   refreshing;
   gboolean                   stale;
+  gboolean                   active;
 };
 
 G_DEFINE_FINAL_TYPE (UnitySpatialWayfire, unity_spatial_wayfire, G_TYPE_OBJECT)
@@ -43,6 +44,7 @@ static const gchar * const watched_events[] = {
   "view-set-output",
   "wset-workspace-changed",
   "output-layout-changed",
+  "output-gain-focus",
   NULL,
 };
 
@@ -135,7 +137,6 @@ read_window (JsonObject                    *view,
     },
     .workspace_x = x,
     .workspace_y = y,
-    .minimized   = json_object_get_boolean_member_with_default (view, "minimized", FALSE),
   };
 }
 
@@ -215,7 +216,7 @@ static gboolean
 read_compositor (UnitySpatialWayfire *self)
 {
   guint                  generation   = self->generation;
-  g_autoptr (DexFuture)  outputs_call = unity_spatial_ipc_call (self->ipc, "window-rules/list-outputs", NULL);
+  g_autoptr (DexFuture)  outputs_call = unity_spatial_ipc_call (self->ipc, "window-rules/get-focused-output", NULL);
   g_autoptr (DexFuture)  views_call   = unity_spatial_ipc_call (self->ipc, "window-rules/list-views", NULL);
   g_autoptr (JsonObject) request      = json_object_new ();
   g_autoptr (JsonNode)   outputs      = NULL;
@@ -233,16 +234,16 @@ read_compositor (UnitySpatialWayfire *self)
   outputs = dex_await_boxed (g_steal_pointer (&outputs_call), NULL);
   views   = dex_await_boxed (g_steal_pointer (&views_call), NULL);
 
-  if (!JSON_NODE_HOLDS_ARRAY (outputs) || !JSON_NODE_HOLDS_ARRAY (views))
+  if (!JSON_NODE_HOLDS_OBJECT (outputs) || !JSON_NODE_HOLDS_ARRAY (views))
     {
       g_warning ("Cannot read the windows from wayfire: bad reply");
       return FALSE;
     }
 
-  if (json_array_get_length (json_node_get_array (outputs)) == 0)
+  output = json_object_get_object_member (json_node_get_object (outputs), "info");
+  if (output == NULL)
     return TRUE;
 
-  output          = json_array_get_object_element (json_node_get_array (outputs), 0);
   self->output_id = json_object_get_int_member (output, "id");
   json_object_set_int_member (request, "output-id", self->output_id);
   stacking = dex_await_boxed (unity_spatial_ipc_call (self->ipc, "unity-spatial-preview/stacking", request), NULL);
@@ -309,13 +310,23 @@ send_view_request (UnitySpatialWayfire *self,
 }
 
 static void
+event_cb (UnitySpatialWayfire *self,
+          const gchar         *name)
+{
+  if (!self->active && (g_strcmp0 (name, "view-geometry-changed") == 0 || g_strcmp0 (name, "view-title-changed") == 0))
+    return;
+
+  unity_spatial_wayfire_refresh (self);
+}
+
+static void
 unity_spatial_wayfire_constructed (GObject *object)
 {
   UnitySpatialWayfire *self = UNITY_SPATIAL_WAYFIRE (object);
 
   G_OBJECT_CLASS (unity_spatial_wayfire_parent_class)->constructed (object);
 
-  g_signal_connect_object (self->ipc, "event", G_CALLBACK (unity_spatial_wayfire_refresh), self, G_CONNECT_SWAPPED);
+  g_signal_connect_object (self->ipc, "event", G_CALLBACK (event_cb), self, G_CONNECT_SWAPPED);
   unity_spatial_ipc_watch (self->ipc, watched_events);
   unity_spatial_wayfire_refresh (self);
 }
@@ -348,6 +359,7 @@ unity_spatial_wayfire_init (UnitySpatialWayfire *self)
   self->windows    = g_object_new (UNITY_SPATIAL_TYPE_WINDOW_VIEW, NULL);
   self->workspaces = g_object_new (UNITY_SPATIAL_TYPE_WORKSPACE_VIEW, NULL);
   self->output_id  = -1;
+  self->active     = TRUE;
 }
 
 UnitySpatialWayfire *
@@ -388,6 +400,17 @@ unity_spatial_wayfire_refresh (UnitySpatialWayfire *self)
 
   self->refreshing = TRUE;
   dex_future_disown (dex_scheduler_spawn (NULL, 0, refresh_fiber, g_object_ref (self), g_object_unref));
+}
+
+void
+unity_spatial_wayfire_set_active (UnitySpatialWayfire *self,
+                                  gboolean             active)
+{
+  g_return_if_fail (UNITY_SPATIAL_IS_WAYFIRE (self));
+
+  self->active = active;
+  if (active)
+    unity_spatial_wayfire_refresh (self);
 }
 
 void

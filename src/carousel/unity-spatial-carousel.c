@@ -27,6 +27,9 @@ struct _UnitySpatialCarousel
   gdouble          progress;
   gint             spacing;
   gboolean         scrolled;
+  gint             width;
+  gint             height;
+  guint            geometry_idle;
 };
 
 static void unity_spatial_carousel_swipeable_init (AdwSwipeableInterface *iface);
@@ -37,7 +40,8 @@ G_DEFINE_FINAL_TYPE_WITH_CODE (UnitySpatialCarousel, unity_spatial_carousel, GTK
 
 typedef enum
 {
-  PROP_SPACING = 1,
+  PROP_PROGRESS = 1,
+  PROP_SPACING,
   PROP_SCROLLED,
 } UnitySpatialCarouselProperty;
 
@@ -107,17 +111,45 @@ animation_done_cb (UnitySpatialCarousel *self)
 }
 
 static void
+scroll_to (UnitySpatialCarousel *self,
+           GtkOrientation        axis,
+           gdouble               to,
+           gdouble               velocity)
+{
+  self->axis = axis;
+  adw_spring_animation_set_value_from (ADW_SPRING_ANIMATION (self->animation), *position_of (self, axis));
+  adw_spring_animation_set_value_to (ADW_SPRING_ANIMATION (self->animation), CLAMP (to, 0, n_pages (axis) - 1));
+  adw_spring_animation_set_initial_velocity (ADW_SPRING_ANIMATION (self->animation), velocity);
+  adw_animation_play (self->animation);
+}
+
+static void
 current_changed_cb (UnitySpatialCarousel *self)
 {
   UnitySpatialWorkspacePage *current = unity_spatial_workspace_view_get_current (unity_spatial_workspace_view_get_default ());
+  gdouble                    x;
+  gdouble                    y;
 
-  if (current == NULL || self->swiping || adw_animation_get_state (self->animation) == ADW_ANIMATION_PLAYING)
+  if (current == NULL || self->swiping)
     return;
 
-  self->x = unity_spatial_workspace_page_get_x (current);
-  self->y = unity_spatial_workspace_page_get_y (current);
-  update_geometry (self);
-  gtk_widget_queue_allocate (GTK_WIDGET (self));
+  x = unity_spatial_workspace_page_get_x (current);
+  y = unity_spatial_workspace_page_get_y (current);
+  if (G_APPROX_VALUE (self->x, x, DBL_EPSILON) && G_APPROX_VALUE (self->y, y, DBL_EPSILON))
+    return;
+
+  if (gtk_widget_get_mapped (GTK_WIDGET (self)) && G_APPROX_VALUE (self->y, y, DBL_EPSILON))
+    scroll_to (self, GTK_ORIENTATION_HORIZONTAL, x, 0);
+  else if (gtk_widget_get_mapped (GTK_WIDGET (self)) && G_APPROX_VALUE (self->x, x, DBL_EPSILON))
+    scroll_to (self, GTK_ORIENTATION_VERTICAL, y, 0);
+  else
+    {
+      adw_animation_pause (self->animation);
+      self->x = x;
+      self->y = y;
+      update_geometry (self);
+      gtk_widget_queue_allocate (GTK_WIDGET (self));
+    }
 }
 
 static void
@@ -170,28 +202,6 @@ thumbnail_at (UnitySpatialCarousel *self,
 }
 
 static void
-update_thumbnails (UnitySpatialCarousel *self)
-{
-  UnitySpatialWorkspaceThumbnail *current = unity_spatial_carousel_get_current (self);
-  gboolean                   wall    = self->progress > 1;
-  gdouble                    morph   = CLAMP (self->progress, 0, 1);
-
-  for (GtkWidget *child = gtk_widget_get_first_child (GTK_WIDGET (self)); child != NULL;
-       child = gtk_widget_get_next_sibling (child))
-    {
-      UnitySpatialWorkspaceThumbnail *thumbnail = UNITY_SPATIAL_WORKSPACE_THUMBNAIL (child);
-
-      gtk_widget_set_can_focus (child, wall || thumbnail == current);
-      if (self->progress == 2 && thumbnail == current)
-        gtk_widget_set_state_flags (child, GTK_STATE_FLAG_SELECTED, FALSE);
-      else
-        gtk_widget_unset_state_flags (child, GTK_STATE_FLAG_SELECTED);
-      unity_spatial_workspace_thumbnail_set_morph (thumbnail, thumbnail == current ? morph : morph >= 1);
-      unity_spatial_workspace_thumbnail_set_wall (thumbnail, wall);
-    }
-}
-
-static void
 rebuild_thumbnails (UnitySpatialCarousel *self)
 {
   GListModel *workspaces = G_LIST_MODEL (unity_spatial_workspace_view_get_default ());
@@ -204,15 +214,18 @@ rebuild_thumbnails (UnitySpatialCarousel *self)
     {
       g_autoptr (UnitySpatialWorkspacePage) workspace = g_list_model_get_item (workspaces, i);
 
-      gtk_widget_set_parent (unity_spatial_workspace_thumbnail_new (workspace), GTK_WIDGET (self));
+      GtkWidget                            *thumbnail = unity_spatial_workspace_thumbnail_new (workspace);
+
+      gtk_widget_set_parent (thumbnail, GTK_WIDGET (self));
+      g_object_bind_property (self, "progress", thumbnail, "progress", G_BINDING_SYNC_CREATE);
     }
 
-  update_thumbnails (self);
   update_geometry (self);
 }
 
 typedef struct
 {
+  graphene_size_t slot;
   graphene_rect_t page;
   graphene_rect_t wall;
   gdouble         scale;
@@ -244,6 +257,7 @@ layout (UnitySpatialCarousel *self,
   graphene_rect_init (&slot, 0, 0, MIN (width, height * aspect), MIN (width, height * aspect) / aspect);
   graphene_rect_offset (&slot, (width - slot.size.width) / 2, (height - slot.size.height) / 2);
 
+  layout.slot = slot.size;
   layout.page = slot;
   if (self->progress < 1 && output_width > 0 && native != NULL &&
       gtk_widget_compute_point (widget, GTK_WIDGET (native), &GRAPHENE_POINT_INIT (0, 0), &origin))
@@ -284,9 +298,23 @@ thumbnail_rect (UnitySpatialCarousel *self,
 static void
 update_geometry (UnitySpatialCarousel *self)
 {
-  Layout   page     = layout (self, gtk_widget_get_width (GTK_WIDGET (self)), gtk_widget_get_height (GTK_WIDGET (self)));
+  gint     width    = gtk_widget_get_width (GTK_WIDGET (self));
+  gint     height   = gtk_widget_get_height (GTK_WIDGET (self));
   gdouble  edge     = -gtk_widget_get_margin_top (GTK_WIDGET (self));
   gboolean scrolled = FALSE;
+  Layout   page;
+
+  if (width <= 0 || height <= 0)
+    {
+      UnitySpatialWorkspaceThumbnail *current = unity_spatial_carousel_get_current (self);
+
+      for (GtkWidget *child = gtk_widget_get_first_child (GTK_WIDGET (self)); child != NULL;
+           child = gtk_widget_get_next_sibling (child))
+        gtk_widget_set_child_visible (child, self->progress >= 1 || child == GTK_WIDGET (current));
+      return;
+    }
+
+  page = layout (self, width, height);
 
   for (GtkWidget *child = gtk_widget_get_first_child (GTK_WIDGET (self)); child != NULL;
        child = gtk_widget_get_next_sibling (child))
@@ -307,6 +335,15 @@ update_geometry (UnitySpatialCarousel *self)
 }
 
 static void
+geometry_idle_cb (gpointer user_data)
+{
+  UnitySpatialCarousel *self = user_data;
+
+  self->geometry_idle = 0;
+  update_geometry (self);
+}
+
+static void
 unity_spatial_carousel_size_allocate (GtkWidget *widget,
                                         gint       width,
                                         gint       height,
@@ -319,6 +356,11 @@ unity_spatial_carousel_size_allocate (GtkWidget *widget,
   self->distance_y = height + self->spacing;
   page             = layout (self, width, height);
 
+  if ((width != self->width || height != self->height) && self->geometry_idle == 0)
+    self->geometry_idle = g_idle_add_once (geometry_idle_cb, self);
+  self->width  = width;
+  self->height = height;
+
   for (GtkWidget *child = gtk_widget_get_first_child (widget); child != NULL; child = gtk_widget_get_next_sibling (child))
     {
       UnitySpatialWorkspacePage *workspace = unity_spatial_workspace_thumbnail_get_workspace (UNITY_SPATIAL_WORKSPACE_THUMBNAIL (child));
@@ -330,8 +372,8 @@ unity_spatial_carousel_size_allocate (GtkWidget *widget,
 
       gtk_widget_measure (child, GTK_ORIENTATION_HORIZONTAL, -1, &child_width, NULL, NULL, NULL);
       gtk_widget_measure (child, GTK_ORIENTATION_VERTICAL, -1, &child_height, NULL, NULL, NULL);
-      child_width  = MAX (child_width, (gint) (page.page.size.width / page.scale));
-      child_height = MAX (child_height, (gint) (page.page.size.height / page.scale));
+      child_width  = MAX (child_width, (gint) page.slot.width);
+      child_height = MAX (child_height, (gint) page.slot.height);
 
       transform = gsk_transform_translate (NULL, &rect.origin);
       transform = gsk_transform_scale (transform, rect.size.width / child_width, rect.size.height / child_height);
@@ -390,6 +432,7 @@ unity_spatial_carousel_dispose (GObject *object)
   UnitySpatialCarousel *self = UNITY_SPATIAL_CAROUSEL (object);
   GtkWidget              *child;
 
+  g_clear_handle_id (&self->geometry_idle, g_source_remove);
   g_clear_object (&self->animation);
   g_clear_object (&self->columns);
   g_clear_object (&self->rows);
@@ -398,6 +441,18 @@ unity_spatial_carousel_dispose (GObject *object)
   gtk_widget_dispose_template (GTK_WIDGET (self), UNITY_SPATIAL_TYPE_CAROUSEL);
 
   G_OBJECT_CLASS (unity_spatial_carousel_parent_class)->dispose (object);
+}
+
+static void
+set_progress (UnitySpatialCarousel *self,
+              gdouble               progress)
+{
+  self->progress = progress;
+  adw_swipe_tracker_set_enabled (self->columns, progress == 1);
+  adw_swipe_tracker_set_enabled (self->rows, progress == 1);
+  update_geometry (self);
+  gtk_widget_queue_allocate (GTK_WIDGET (self));
+  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_PROGRESS]);
 }
 
 static void
@@ -410,6 +465,9 @@ unity_spatial_carousel_get_property (GObject    *object,
 
   switch ((UnitySpatialCarouselProperty) prop_id)
     {
+    case PROP_PROGRESS:
+      g_value_set_double (value, self->progress);
+      break;
     case PROP_SPACING:
       g_value_set_int (value, self->spacing);
       break;
@@ -429,11 +487,15 @@ unity_spatial_carousel_set_property (GObject      *object,
 
   switch ((UnitySpatialCarouselProperty) prop_id)
     {
+    case PROP_PROGRESS:
+      set_progress (self, g_value_get_double (value));
+      break;
     case PROP_SPACING:
       self->spacing = g_value_get_int (value);
       gtk_widget_queue_allocate (GTK_WIDGET (self));
       break;
     case PROP_SCROLLED:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
     }
 }
@@ -449,6 +511,16 @@ unity_spatial_carousel_class_init (UnitySpatialCarouselClass *klass)
   object_class->set_property = unity_spatial_carousel_set_property;
 
   widget_class->size_allocate = unity_spatial_carousel_size_allocate;
+
+  /**
+   * UnitySpatialCarousel:progress:
+   *
+   * The page position of the view, from 0 to 2. At 1 the carousel can be
+   * swiped; above 1 it zooms out toward the grid of all workspaces.
+   */
+  properties[PROP_PROGRESS] =
+    g_param_spec_double ("progress", NULL, NULL, 0, 2, 0,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /**
    * UnitySpatialCarousel:spacing:
@@ -500,9 +572,9 @@ unity_spatial_carousel_init (UnitySpatialCarousel *self)
   g_signal_connect_swapped (self->animation, "done", G_CALLBACK (animation_done_cb), self);
 
   g_signal_connect_object (view, "items-changed", G_CALLBACK (rebuild_thumbnails), self, G_CONNECT_SWAPPED);
-  g_signal_connect_object (view, "notify::current", G_CALLBACK (update_thumbnails), self, G_CONNECT_SWAPPED);
   g_signal_connect_object (view, "notify::current", G_CALLBACK (current_changed_cb), self, G_CONNECT_SWAPPED);
   g_signal_connect_object (view, "notify::workarea", G_CALLBACK (gtk_widget_queue_allocate), self, G_CONNECT_SWAPPED);
+  g_signal_connect_object (view, "notify::workarea", G_CALLBACK (update_geometry), self, G_CONNECT_SWAPPED);
   rebuild_thumbnails (self);
   current_changed_cb (self);
 }
@@ -520,23 +592,9 @@ unity_spatial_carousel_get_current (UnitySpatialCarousel *self)
   return thumbnail_at (self, unity_spatial_workspace_page_get_x (current), unity_spatial_workspace_page_get_y (current));
 }
 
-void
-unity_spatial_carousel_set_progress (UnitySpatialCarousel *self,
-                                       gdouble                 progress)
-{
-  g_return_if_fail (UNITY_SPATIAL_IS_CAROUSEL (self));
-
-  self->progress = progress;
-  adw_swipe_tracker_set_enabled (self->columns, progress == 1);
-  adw_swipe_tracker_set_enabled (self->rows, progress == 1);
-  update_thumbnails (self);
-  update_geometry (self);
-  gtk_widget_queue_allocate (GTK_WIDGET (self));
-}
-
 gdouble
 unity_spatial_carousel_get_position (UnitySpatialCarousel *self,
-                                       GtkOrientation          axis)
+                                     GtkOrientation        axis)
 {
   g_return_val_if_fail (UNITY_SPATIAL_IS_CAROUSEL (self), 0);
 
@@ -545,7 +603,7 @@ unity_spatial_carousel_get_position (UnitySpatialCarousel *self,
 
 void
 unity_spatial_carousel_begin_swipe (UnitySpatialCarousel *self,
-                                      GtkOrientation          axis)
+                                    GtkOrientation        axis)
 {
   g_return_if_fail (UNITY_SPATIAL_IS_CAROUSEL (self));
 
@@ -556,7 +614,7 @@ unity_spatial_carousel_begin_swipe (UnitySpatialCarousel *self,
 
 void
 unity_spatial_carousel_update_swipe (UnitySpatialCarousel *self,
-                                       gdouble                 progress)
+                                     gdouble               progress)
 {
   g_return_if_fail (UNITY_SPATIAL_IS_CAROUSEL (self));
 
@@ -565,14 +623,11 @@ unity_spatial_carousel_update_swipe (UnitySpatialCarousel *self,
 
 void
 unity_spatial_carousel_end_swipe (UnitySpatialCarousel *self,
-                                    gdouble                 velocity,
-                                    gdouble                 to)
+                                  gdouble               velocity,
+                                  gdouble               to)
 {
   g_return_if_fail (UNITY_SPATIAL_IS_CAROUSEL (self));
 
   self->swiping = FALSE;
-  adw_spring_animation_set_value_from (ADW_SPRING_ANIMATION (self->animation), *position_of (self, self->axis));
-  adw_spring_animation_set_value_to (ADW_SPRING_ANIMATION (self->animation), CLAMP (to, 0, n_pages (self->axis) - 1));
-  adw_spring_animation_set_initial_velocity (ADW_SPRING_ANIMATION (self->animation), velocity);
-  adw_animation_play (self->animation);
+  scroll_to (self, self->axis, to, velocity);
 }

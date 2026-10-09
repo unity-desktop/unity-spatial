@@ -27,6 +27,9 @@ struct _UnitySpatialView
   gdouble               progress;
   gboolean              swiping;
   gboolean              enable_search;
+  guint                 first_frame;
+  gboolean              drawn;
+  gboolean              play_pending;
 };
 
 G_DEFINE_FINAL_TYPE (UnitySpatialView, unity_spatial_view, GTK_TYPE_WIDGET)
@@ -58,27 +61,23 @@ static void
 apply_progress (UnitySpatialView *self,
                 gdouble           progress)
 {
-  UnitySpatialWorkspaceThumbnail *current;
-
   progress = CLAMP (progress, UNITY_SPATIAL_PAGE_DESKTOP, UNITY_SPATIAL_PAGE_WORKSPACES);
   if (G_APPROX_VALUE (self->progress, progress, DBL_EPSILON))
     return;
 
   self->progress = progress;
-  unity_spatial_carousel_set_progress (self->carousel, progress);
+  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_PROGRESS]);
   gtk_widget_set_opacity (GTK_WIDGET (self->search_bar), MIN (progress, UNITY_SPATIAL_PAGE_WINDOWS));
   gtk_widget_set_overflow (GTK_WIDGET (self->pages),
                            progress >= UNITY_SPATIAL_PAGE_WINDOWS ? GTK_OVERFLOW_HIDDEN : GTK_OVERFLOW_VISIBLE);
 
-  current = unity_spatial_carousel_get_current (self->carousel);
-  if (self->enable_search && (progress == UNITY_SPATIAL_PAGE_WINDOWS || progress == UNITY_SPATIAL_PAGE_WORKSPACES))
-    gtk_widget_grab_focus (GTK_WIDGET (self->search));
-  else if (current != NULL && progress == UNITY_SPATIAL_PAGE_WINDOWS)
-    gtk_widget_child_focus (GTK_WIDGET (current), GTK_DIR_TAB_FORWARD);
-  else if (current != NULL && progress == UNITY_SPATIAL_PAGE_WORKSPACES)
-    gtk_widget_grab_focus (GTK_WIDGET (current));
+  if (progress != UNITY_SPATIAL_PAGE_WINDOWS && progress != UNITY_SPATIAL_PAGE_WORKSPACES)
+    return;
 
-  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_PROGRESS]);
+  if (self->enable_search)
+    gtk_widget_grab_focus (GTK_WIDGET (self->search));
+  else if (unity_spatial_carousel_get_current (self->carousel) != NULL)
+    gtk_widget_grab_focus (GTK_WIDGET (unity_spatial_carousel_get_current (self->carousel)));
 }
 
 static gboolean
@@ -101,7 +100,41 @@ animate_to (UnitySpatialView *self,
   adw_spring_animation_set_value_from (ADW_SPRING_ANIMATION (self->animation), self->progress);
   adw_spring_animation_set_value_to (ADW_SPRING_ANIMATION (self->animation), page);
   adw_spring_animation_set_initial_velocity (ADW_SPRING_ANIMATION (self->animation), velocity);
-  adw_animation_play (self->animation);
+
+  if (self->first_frame != 0)
+    self->play_pending = TRUE;
+  else
+    adw_animation_play (self->animation);
+}
+
+static void
+stop_animation (UnitySpatialView *self)
+{
+  self->play_pending = FALSE;
+  adw_animation_pause (self->animation);
+}
+
+static gboolean
+first_frame_cb (GtkWidget     *widget,
+                GdkFrameClock *clock,
+                gpointer       user_data)
+{
+  UnitySpatialView *self = UNITY_SPATIAL_VIEW (widget);
+
+  if (!self->drawn)
+    {
+      self->drawn = TRUE;
+      return G_SOURCE_CONTINUE;
+    }
+
+  self->first_frame = 0;
+  if (self->play_pending)
+    {
+      self->play_pending = FALSE;
+      adw_animation_play (self->animation);
+    }
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -114,8 +147,11 @@ animation_value_cb (gdouble           value,
 static void
 animation_done_cb (UnitySpatialView *self)
 {
-  if (self->page == UNITY_SPATIAL_PAGE_DESKTOP)
-    g_signal_emit (self, signals[SIGNAL_CLOSED], 0);
+  if (self->page != UNITY_SPATIAL_PAGE_DESKTOP)
+    return;
+
+  gtk_editable_set_text (GTK_EDITABLE (self->search), "");
+  g_signal_emit (self, signals[SIGNAL_CLOSED], 0);
 }
 
 static void
@@ -214,6 +250,30 @@ close_action (GtkWidget   *widget,
 }
 
 static void
+unity_spatial_view_map (GtkWidget *widget)
+{
+  UnitySpatialView *self = UNITY_SPATIAL_VIEW (widget);
+
+  GTK_WIDGET_CLASS (unity_spatial_view_parent_class)->map (widget);
+
+  self->drawn       = FALSE;
+  self->first_frame = gtk_widget_add_tick_callback (widget, first_frame_cb, NULL, NULL);
+}
+
+static void
+unity_spatial_view_unmap (GtkWidget *widget)
+{
+  UnitySpatialView *self = UNITY_SPATIAL_VIEW (widget);
+
+  if (self->first_frame != 0)
+    gtk_widget_remove_tick_callback (widget, self->first_frame);
+  self->first_frame  = 0;
+  self->play_pending = FALSE;
+
+  GTK_WIDGET_CLASS (unity_spatial_view_parent_class)->unmap (widget);
+}
+
+static void
 unity_spatial_view_dispose (GObject *object)
 {
   UnitySpatialView *self = UNITY_SPATIAL_VIEW (object);
@@ -277,6 +337,9 @@ unity_spatial_view_class_init (UnitySpatialViewClass *klass)
   object_class->dispose      = unity_spatial_view_dispose;
   object_class->get_property = unity_spatial_view_get_property;
   object_class->set_property = unity_spatial_view_set_property;
+
+  widget_class->map   = unity_spatial_view_map;
+  widget_class->unmap = unity_spatial_view_unmap;
 
   /**
    * UnitySpatialView:page:
@@ -395,7 +458,7 @@ unity_spatial_view_set_progress (UnitySpatialView *self,
 {
   g_return_if_fail (UNITY_SPATIAL_IS_VIEW (self));
 
-  adw_animation_pause (self->animation);
+  stop_animation (self);
   apply_progress (self, progress);
 }
 
@@ -434,7 +497,7 @@ unity_spatial_view_begin_swipe (UnitySpatialView *self)
 {
   g_return_if_fail (UNITY_SPATIAL_IS_VIEW (self));
 
-  adw_animation_pause (self->animation);
+  stop_animation (self);
   self->swiping = TRUE;
 }
 
@@ -444,7 +507,8 @@ unity_spatial_view_update_swipe (UnitySpatialView *self,
 {
   g_return_if_fail (UNITY_SPATIAL_IS_VIEW (self));
 
-  apply_progress (self, progress);
+  if (self->swiping)
+    apply_progress (self, progress);
 }
 
 void
@@ -453,6 +517,9 @@ unity_spatial_view_end_swipe (UnitySpatialView *self,
                               gdouble           to)
 {
   g_return_if_fail (UNITY_SPATIAL_IS_VIEW (self));
+
+  if (!self->swiping)
+    return;
 
   self->swiping = FALSE;
   animate_to (self, (UnitySpatialPage) CLAMP (round (to), UNITY_SPATIAL_PAGE_DESKTOP, UNITY_SPATIAL_PAGE_WORKSPACES),

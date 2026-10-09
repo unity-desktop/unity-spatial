@@ -36,6 +36,7 @@
                 <property name="name">carousel</property>
                 <property name="child">
                   <object class="UnitySpatialCarousel" id="carousel">
+                    <property name="progress" bind-source="UnitySpatialView" bind-property="progress" bind-flags="sync-create"/>
                     <signal name="notify::scrolled" handler="update_bar_style" swapped="true"/>
                     <signal name="page-changed" handler="carousel_page_changed_cb" swapped="true"/>
                     <child>
