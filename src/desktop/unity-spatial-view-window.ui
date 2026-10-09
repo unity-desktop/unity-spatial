@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <template class="UnitySpatialViewWindow" parent="UnityWindow">
+    <property name="namespace">unity-spatial</property>
+    <property name="stylesheet">/org/unity/spatial/spatial.css</property>
+    <property name="layer">overlay</property>
+    <property name="anchor">top|bottom|left|right</property>
+    <property name="exclusivity">normal</property>
+    <property name="keymode">exclusive</property>
+    <property name="content">
+      <object class="UnitySpatialView" id="view"/>
+    </property>
+  </template>
+</interface>

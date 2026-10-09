@@ -16,7 +16,7 @@ G_BEGIN_DECLS
 /**
  * UnitySpatialWindowPage:
  *
- * One window of the desktop, as the overview shows it.
+ * One window of the desktop, as the spatial view shows it.
  */
 G_DECLARE_FINAL_TYPE (UnitySpatialWindowPage, unity_spatial_window_page, UNITY_SPATIAL, WINDOW_PAGE, GObject)
 

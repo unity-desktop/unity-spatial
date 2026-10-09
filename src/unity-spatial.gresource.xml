@@ -2,6 +2,11 @@
 <gresources>
   <gresource prefix="/org/unity/spatial">
     <file>spatial.css</file>
-    <file preprocess="xml-stripblanks" alias="unity-spatial-window-thumbnail.ui">components/window/unity-spatial-window-thumbnail.ui</file>
+    <file preprocess="xml-stripblanks" alias="unity-spatial-wallpaper-window.ui">desktop/unity-spatial-wallpaper-window.ui</file>
+    <file preprocess="xml-stripblanks" alias="unity-spatial-view-window.ui">desktop/unity-spatial-view-window.ui</file>
+    <file preprocess="xml-stripblanks" alias="unity-spatial-view.ui">spatialview/unity-spatial-view.ui</file>
+    <file preprocess="xml-stripblanks" alias="unity-spatial-window-thumbnail.ui">window/unity-spatial-window-thumbnail.ui</file>
+    <file preprocess="xml-stripblanks" alias="unity-spatial-workspace-thumbnail.ui">workspace/unity-spatial-workspace-thumbnail.ui</file>
+    <file preprocess="xml-stripblanks" alias="unity-spatial-carousel.ui">carousel/unity-spatial-carousel.ui</file>
   </gresource>
 </gresources>

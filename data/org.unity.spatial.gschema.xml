@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.unity.spatial" path="/org/unity/spatial/">
+    <key name="show-search" type="b">
+      <default>true</default>
+      <summary>Show the search bar in spatial views</summary>
+    </key>
+  </schema>
+</schemalist>
