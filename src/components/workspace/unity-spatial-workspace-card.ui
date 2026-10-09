@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <template class="UnitySpatialWorkspaceCard" parent="GtkWidget">
+    <property name="layout-manager">
+      <object class="GtkBinLayout"/>
+    </property>
+    <property name="overflow">hidden</property>
+    <property name="accessible-role">button</property>
+    <style>
+      <class name="card"/>
+    </style>
+    <child>
+      <object class="UnitySpatialPreviewMirror" id="backdrop"/>
+    </child>
+    <child>
+      <object class="UnitySpatialWindowGrid" id="grid">
+        <property name="margin-top">24</property>
+        <property name="margin-bottom">24</property>
+        <property name="margin-start">24</property>
+        <property name="margin-end">24</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkDropTarget">
+        <property name="actions">move</property>
+        <property name="formats">UnitySpatialWindowPage</property>
+        <signal name="drop" handler="drop_cb" swapped="true"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkGestureClick">
+        <signal name="released" handler="released_cb" swapped="true"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkShortcutController">
+        <child>
+          <object class="GtkShortcut">
+            <property name="trigger">Return|ISO_Enter|KP_Enter|space|KP_Space</property>
+            <property name="action">activate</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>
