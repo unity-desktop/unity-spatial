@@ -20,7 +20,6 @@ G_DECLARE_FINAL_TYPE (UnitySpatialWindowThumbnail, unity_spatial_window_thumbnai
 UnitySpatialWindowThumbnail *unity_spatial_window_thumbnail_new         (UnitySpatialWindowPage      *page);
 
 UnitySpatialWindowPage      *unity_spatial_window_thumbnail_get_page    (UnitySpatialWindowThumbnail *self);
-GtkWidget                   *unity_spatial_window_thumbnail_get_preview (UnitySpatialWindowThumbnail *self);
 
 void                         unity_spatial_window_thumbnail_set_chrome_visible (UnitySpatialWindowThumbnail *self,
                                                                                 gboolean                     visible);

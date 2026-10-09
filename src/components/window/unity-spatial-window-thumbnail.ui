@@ -8,7 +8,7 @@
     <child>
       <object class="GtkButton" id="card">
         <property name="css-name">windowcard</property>
-        <signal name="clicked" handler="card_clicked_cb" swapped="true"/>
+        <property name="action-name">stage.activate-window</property>
         <property name="child">
           <object class="UnitySpatialPreviewMirror" id="preview"/>
         </property>

@@ -33,13 +33,6 @@ typedef enum
 
 static GParamSpec *properties[PROP_PAGE + 1];
 
-typedef enum
-{
-  SIGNAL_ACTIVATED,
-} UnitySpatialWindowThumbnailSignal;
-
-static guint signals[SIGNAL_ACTIVATED + 1];
-
 static AstalAppsApps *
 get_apps (void)
 {
@@ -104,12 +97,6 @@ update_title (UnitySpatialWindowThumbnail *self)
 }
 
 static void
-card_clicked_cb (UnitySpatialWindowThumbnail *self)
-{
-  g_signal_emit (self, signals[SIGNAL_ACTIVATED], 0);
-}
-
-static void
 close_clicked_cb (UnitySpatialWindowThumbnail *self)
 {
   unity_spatial_window_view_close_page (unity_spatial_window_view_get_default (), self->page);
@@ -160,9 +147,6 @@ unity_spatial_window_thumbnail_class_init (UnitySpatialWindowThumbnailClass *kla
 
   g_object_class_install_properties (object_class, G_N_ELEMENTS (properties), properties);
 
-  signals[SIGNAL_ACTIVATED] =
-    g_signal_new ("activated", G_TYPE_FROM_CLASS (klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-
   g_type_ensure (UNITY_SPATIAL_TYPE_PREVIEW_MIRROR);
 
   gtk_widget_class_set_template_from_resource (widget_class,
@@ -172,7 +156,6 @@ unity_spatial_window_thumbnail_class_init (UnitySpatialWindowThumbnailClass *kla
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, title);
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, preview);
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, close_button);
-  gtk_widget_class_bind_template_callback (widget_class, card_clicked_cb);
   gtk_widget_class_bind_template_callback (widget_class, close_clicked_cb);
 
   gtk_widget_class_set_css_name (widget_class, "windowthumbnail");
@@ -197,8 +180,8 @@ unity_spatial_window_thumbnail_new (UnitySpatialWindowPage *page)
   update_title (self);
   g_signal_connect_object (page, "notify::app-id", G_CALLBACK (update_icon), self, G_CONNECT_SWAPPED);
   g_signal_connect_object (page, "notify::title", G_CALLBACK (update_title), self, G_CONNECT_SWAPPED);
-  unity_spatial_preview_mirror_set_view_id (self->preview,
-                                            unity_spatial_window_page_get_view_id (page));
+  unity_spatial_preview_mirror_set_view_id (self->preview, unity_spatial_window_page_get_view_id (page));
+  gtk_actionable_set_action_target (GTK_ACTIONABLE (self->card), "u", unity_spatial_window_page_get_view_id (page));
 
   return self;
 }
@@ -209,14 +192,6 @@ unity_spatial_window_thumbnail_get_page (UnitySpatialWindowThumbnail *self)
   g_return_val_if_fail (UNITY_SPATIAL_IS_WINDOW_THUMBNAIL (self), NULL);
 
   return self->page;
-}
-
-GtkWidget *
-unity_spatial_window_thumbnail_get_preview (UnitySpatialWindowThumbnail *self)
-{
-  g_return_val_if_fail (UNITY_SPATIAL_IS_WINDOW_THUMBNAIL (self), NULL);
-
-  return GTK_WIDGET (self->preview);
 }
 
 void

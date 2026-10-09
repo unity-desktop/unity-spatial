@@ -152,10 +152,8 @@ pack_rows (GArray  *items,
 static void
 place_items (GArray                *items,
              const graphene_rect_t *area,
-             const GtkBorder       *chrome)
+             gdouble                gap)
 {
-  gdouble          gap_x       = SPACING + chrome->left + chrome->right;
-  gdouble          gap_y       = SPACING + chrome->top + chrome->bottom;
   gdouble          total_width = 0;
   gdouble          best_scale  = 0;
   gdouble          best_score  = -1;
@@ -185,8 +183,8 @@ place_items (GArray                *items,
           max_cols  = MAX (max_cols, g_array_index (rows, Row, r).count);
         }
 
-      hspace = (max_cols - 1) * gap_x;
-      vspace = (rows->len - 1) * gap_y;
+      hspace = (max_cols - 1) * gap;
+      vspace = (rows->len - 1) * gap;
       scale  = MIN (MIN (MAX (1, area->size.width - hspace) / grid_w, MAX (1, area->size.height - vspace) / grid_h),
                     MAX_PREVIEW);
       score  = scale + SPACE_WEIGHT * (grid_w * scale + hspace) * (grid_h * scale + vspace) /
@@ -203,14 +201,14 @@ place_items (GArray                *items,
 
   for (guint r = 0; r < best->len; r++)
     grid_height += g_array_index (best, Row, r).height;
-  y = area->origin.y + MAX (0, (area->size.height - grid_height * best_scale - (best->len - 1) * gap_y) / 2);
+  y = area->origin.y + MAX (0, (area->size.height - grid_height * best_scale - (best->len - 1) * gap) / 2);
 
   for (guint r = 0; r < best->len; r++)
     {
       Row    *row        = &g_array_index (best, Row, r);
       gdouble row_height = row->height * best_scale;
       gdouble x          = area->origin.x +
-                           MAX (0, (area->size.width - row->width * best_scale - (row->count - 1) * gap_x) / 2);
+                           MAX (0, (area->size.width - row->width * best_scale - (row->count - 1) * gap) / 2);
 
       g_sort_array (&g_array_index (items, Item, row->start), row->count, sizeof (Item), compare_center_x, NULL);
 
@@ -223,30 +221,25 @@ place_items (GArray                *items,
           gdouble height = item->frame->height * scale;
           gdouble top    = best->len == 1 ? y + (row_height - height) / 2 : y + row_height - height;
 
-          item->child->to = GRAPHENE_RECT_INIT (x + (cell - width) / 2 - chrome->left, top - chrome->top,
-                                                width + chrome->left + chrome->right,
-                                                height + chrome->top + chrome->bottom);
-          x += cell + gap_x;
+          item->child->to = GRAPHENE_RECT_INIT (x + (cell - width) / 2, top, width, height);
+          x += cell + gap;
         }
 
-      y += row_height + gap_y;
+      y += row_height + gap;
     }
 }
 
 static graphene_rect_t
 desktop_rect (UnitySpatialWindowLayoutChild *child,
               const graphene_rect_t         *card,
-              const graphene_size_t         *output,
-              const GtkBorder               *chrome)
+              const graphene_size_t         *output)
 {
   const GdkRectangle *frame = frame_of (child);
   gdouble             sx    = card->size.width / output->width;
   gdouble             sy    = card->size.height / output->height;
 
-  return GRAPHENE_RECT_INIT (card->origin.x + frame->x * sx - chrome->left,
-                             card->origin.y + frame->y * sy - chrome->top,
-                             frame->width * sx + chrome->left + chrome->right,
-                             frame->height * sy + chrome->top + chrome->bottom);
+  return GRAPHENE_RECT_INIT (card->origin.x + frame->x * sx, card->origin.y + frame->y * sy, frame->width * sx,
+                             frame->height * sy);
 }
 
 static graphene_rect_t
@@ -274,7 +267,6 @@ static void
 retarget (UnitySpatialWindowLayout *self,
           GtkWidget                *widget,
           GPtrArray                *children,
-          const GtkBorder          *chrome,
           gint                      width,
           gint                      height)
 {
@@ -283,8 +275,7 @@ retarget (UnitySpatialWindowLayout *self,
   gboolean           moved   = FALSE;
   g_autoptr (GArray) items   = g_array_new (FALSE, FALSE, sizeof (Item));
   g_autoptr (GArray) shown   = g_array_new (FALSE, FALSE, sizeof (graphene_rect_t));
-  graphene_rect_t    area    = GRAPHENE_RECT_INIT (chrome->left, chrome->top, width - chrome->left - chrome->right,
-                                                   height - chrome->top - chrome->bottom);
+  graphene_rect_t    area    = GRAPHENE_RECT_INIT (0, 0, width, height);
   gint               output_width;
   gint               monitor = 0;
 
@@ -305,7 +296,7 @@ retarget (UnitySpatialWindowLayout *self,
       child->from = child->to;
     }
 
-  place_items (items, &area, chrome);
+  place_items (items, &area, SPACING);
 
   for (guint i = 0; i < children->len; i++)
     {
@@ -359,7 +350,6 @@ unity_spatial_window_layout_allocate (GtkLayoutManager *manager,
   gboolean                  morphing = FALSE;
   graphene_rect_t           card;
   graphene_size_t           output;
-  GtkBorder                 chrome;
   gint                      output_width;
   gint                      output_height;
 
@@ -372,11 +362,9 @@ unity_spatial_window_layout_allocate (GtkLayoutManager *manager,
   if (children->len == 0)
     return;
 
-  unity_spatial_window_thumbnail_get_chrome (
-    UNITY_SPATIAL_WINDOW_THUMBNAIL (gtk_layout_child_get_child_widget (g_ptr_array_index (children, 0))), &chrome);
 
   if (self->dirty || width != self->width || height != self->height)
-    retarget (self, widget, children, &chrome, width, height);
+    retarget (self, widget, children, width, height);
   self->dirty = FALSE;
 
   unity_spatial_workspace_view_get_output_size (unity_spatial_workspace_view_get_default (), &output_width,
@@ -397,12 +385,11 @@ unity_spatial_window_layout_allocate (GtkLayoutManager *manager,
 
       if (morphing)
         {
-          graphene_rect_t desktop = desktop_rect (child, &card, &output, &chrome);
+          graphene_rect_t desktop = desktop_rect (child, &card, &output);
 
           graphene_rect_interpolate (&desktop, &rect, self->morph, &rect);
         }
 
-      gtk_widget_set_opacity (thumb, child->appearing ? self->settle : 1);
       box = unity_spatial_preview_mirror_snap_rect (&rect);
       gtk_widget_allocate (thumb, box.width, box.height, -1,
                            gsk_transform_translate (NULL, &GRAPHENE_POINT_INIT (box.x, box.y)));
