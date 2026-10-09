@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <libdex.h>
+
 #include "unity-spatial-window-view.h"
 #include "unity-spatial-workspace-view.h"
 
@@ -35,7 +37,7 @@ void                       unity_spatial_wayfire_send_view          (UnitySpatia
                                                                      gint                 x,
                                                                      gint                 y);
 
-void                       unity_spatial_wayfire_set_workspace      (UnitySpatialWayfire *self,
+DexFuture                 *unity_spatial_wayfire_set_workspace      (UnitySpatialWayfire *self,
                                                                      gint                 x,
                                                                      gint                 y);
 

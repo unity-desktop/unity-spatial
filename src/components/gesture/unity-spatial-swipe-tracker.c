@@ -30,8 +30,8 @@ struct _UnitySpatialSwipeTracker
 
 UnitySpatialSwipeTracker *
 unity_spatial_swipe_tracker_new (gdouble from,
-                         gdouble lower,
-                         gdouble upper)
+                                 gdouble lower,
+                                 gdouble upper)
 {
   UnitySpatialSwipeTracker *self = g_new0 (UnitySpatialSwipeTracker, 1);
 
@@ -53,8 +53,8 @@ unity_spatial_swipe_tracker_free (UnitySpatialSwipeTracker *self)
 
 gdouble
 unity_spatial_swipe_tracker_update (UnitySpatialSwipeTracker *self,
-                            guint32            time,
-                            gdouble            delta)
+                                    guint32                   time,
+                                    gdouble                   delta)
 {
   guint stale = 0;
 
@@ -90,7 +90,7 @@ velocity (UnitySpatialSwipeTracker *self)
 
 gdouble
 unity_spatial_swipe_tracker_end (UnitySpatialSwipeTracker *self,
-                         gboolean           cancelled)
+                                 gboolean                  cancelled)
 {
   gdouble speed = velocity (self);
   gdouble target;

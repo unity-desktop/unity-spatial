@@ -252,18 +252,12 @@ call_fiber (gpointer user_data)
 }
 
 static void
-emit_event (Watch    *watch,
-            JsonNode *event)
+emit_event (Watch *watch)
 {
   g_autoptr (UnitySpatialIpc) self = g_weak_ref_get (&watch->owner);
-  JsonObject                 *object;
 
-  if (self == NULL || !JSON_NODE_HOLDS_OBJECT (event))
-    return;
-
-  object = json_node_get_object (event);
-  g_signal_emit (self, signals[SIGNAL_EVENT],
-                 g_quark_from_string (json_object_get_string_member_with_default (object, "event", "")), object);
+  if (self != NULL)
+    g_signal_emit (self, signals[SIGNAL_EVENT], 0);
 }
 
 static DexFuture *
@@ -284,25 +278,13 @@ watch_fiber (gpointer user_data)
       if (event == NULL)
         break;
 
-      emit_event (watch, event);
+      emit_event (watch);
     }
 
   if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
     g_warning ("Wayfire IPC events stopped: %s", error->message);
 
   return dex_future_new_for_error (g_steal_pointer (&error));
-}
-
-static DexFuture *
-log_failure (DexFuture *future,
-             gpointer   user_data)
-{
-  g_autoptr (GError) error = NULL;
-
-  dex_future_get_value (future, &error);
-  g_warning ("Wayfire IPC %s failed: %s", (const gchar *) user_data, error->message);
-
-  return NULL;
 }
 
 static void
@@ -325,8 +307,7 @@ unity_spatial_ipc_class_init (UnitySpatialIpcClass *klass)
   object_class->dispose = unity_spatial_ipc_dispose;
 
   signals[SIGNAL_EVENT] =
-    g_signal_new ("event", G_TYPE_FROM_CLASS (klass), G_SIGNAL_RUN_LAST | G_SIGNAL_DETAILED, 0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 1, JSON_TYPE_OBJECT);
+    g_signal_new ("event", G_TYPE_FROM_CLASS (klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 
   dex_init ();
 }
@@ -362,17 +343,6 @@ unity_spatial_ipc_call (UnitySpatialIpc *self,
     return dex_future_new_reject (G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "Neither _WAYFIRE_SOCKET nor WAYFIRE_SOCKET is set");
 
   return dex_scheduler_spawn (NULL, 0, call_fiber, request_new (self, method, data), (GDestroyNotify) request_free);
-}
-
-void
-unity_spatial_ipc_send (UnitySpatialIpc *self,
-                        const gchar     *method,
-                        JsonObject      *data)
-{
-  g_return_if_fail (UNITY_SPATIAL_IS_IPC (self));
-
-  dex_future_disown (dex_future_catch (unity_spatial_ipc_call (self, method, data), log_failure, g_strdup (method),
-                                       g_free));
 }
 
 void

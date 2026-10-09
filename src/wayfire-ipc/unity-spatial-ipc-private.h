@@ -22,10 +22,6 @@ DexFuture       *unity_spatial_ipc_call  (UnitySpatialIpc     *self,
                                           const gchar         *method,
                                           JsonObject          *data);
 
-void             unity_spatial_ipc_send  (UnitySpatialIpc     *self,
-                                          const gchar         *method,
-                                          JsonObject          *data);
-
 void             unity_spatial_ipc_watch (UnitySpatialIpc     *self,
                                           const gchar * const *events);
 

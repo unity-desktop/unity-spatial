@@ -24,6 +24,7 @@ struct _UnitySpatialWayfire
   UnitySpatialWindowView    *windows;
   UnitySpatialWorkspaceView *workspaces;
   gint64                     output_id;
+  guint                      generation;
   gboolean                   refreshing;
   gboolean                   stale;
 };
@@ -213,6 +214,7 @@ apply (UnitySpatialWayfire *self,
 static gboolean
 read_compositor (UnitySpatialWayfire *self)
 {
+  guint                  generation   = self->generation;
   g_autoptr (DexFuture)  outputs_call = unity_spatial_ipc_call (self->ipc, "window-rules/list-outputs", NULL);
   g_autoptr (DexFuture)  views_call   = unity_spatial_ipc_call (self->ipc, "window-rules/list-views", NULL);
   g_autoptr (JsonObject) request      = json_object_new ();
@@ -245,7 +247,8 @@ read_compositor (UnitySpatialWayfire *self)
   json_object_set_int_member (request, "output-id", self->output_id);
   stacking = dex_await_boxed (unity_spatial_ipc_call (self->ipc, "unity-spatial-preview/stacking", request), NULL);
 
-  apply (self, output, json_node_get_array (views), stacking);
+  if (generation == self->generation)
+    apply (self, output, json_node_get_array (views), stacking);
 
   return TRUE;
 }
@@ -267,6 +270,33 @@ refresh_fiber (gpointer user_data)
   return dex_future_new_true ();
 }
 
+static DexFuture *
+sent_cb (DexFuture *future,
+         gpointer   user_data)
+{
+  UnitySpatialWayfire *self  = user_data;
+  g_autoptr (GError)   error = NULL;
+
+  if (dex_future_get_value (future, &error) == NULL)
+    g_warning ("Wayfire IPC request failed: %s", error->message);
+
+  self->generation++;
+  unity_spatial_wayfire_refresh (self);
+
+  return NULL;
+}
+
+static DexFuture *
+send (UnitySpatialWayfire *self,
+      const gchar         *method,
+      JsonObject          *data)
+{
+  self->generation++;
+
+  return dex_future_finally (unity_spatial_ipc_call (self->ipc, method, data), sent_cb, g_object_ref (self),
+                             g_object_unref);
+}
+
 static void
 send_view_request (UnitySpatialWayfire *self,
                    const gchar         *method,
@@ -275,7 +305,7 @@ send_view_request (UnitySpatialWayfire *self,
   g_autoptr (JsonObject) data = json_object_new ();
 
   json_object_set_int_member (data, "id", view_id);
-  unity_spatial_ipc_send (self->ipc, method, data);
+  dex_future_disown (send (self, method, data));
 }
 
 static void
@@ -391,20 +421,20 @@ unity_spatial_wayfire_send_view (UnitySpatialWayfire *self,
   json_object_set_int_member (data, "view-id", view_id);
   json_object_set_int_member (data, "x", x);
   json_object_set_int_member (data, "y", y);
-  unity_spatial_ipc_send (self->ipc, "vswitch/send-view", data);
+  dex_future_disown (send (self, "vswitch/send-view", data));
 }
 
-void
+DexFuture *
 unity_spatial_wayfire_set_workspace (UnitySpatialWayfire *self,
                                      gint                 x,
                                      gint                 y)
 {
   g_autoptr (JsonObject) data = json_object_new ();
 
-  g_return_if_fail (UNITY_SPATIAL_IS_WAYFIRE (self));
+  g_return_val_if_fail (UNITY_SPATIAL_IS_WAYFIRE (self), NULL);
 
   json_object_set_int_member (data, "output-id", self->output_id);
   json_object_set_int_member (data, "x", x);
   json_object_set_int_member (data, "y", y);
-  unity_spatial_ipc_send (self->ipc, "unity-spatial-preview/set-workspace", data);
+  return send (self, "unity-spatial-preview/set-workspace", data);
 }
