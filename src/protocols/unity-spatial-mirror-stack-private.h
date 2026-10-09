@@ -23,4 +23,6 @@ void                     unity_spatial_mirror_stack_add            (UnitySpatial
 void                     unity_spatial_mirror_stack_remove         (UnitySpatialMirrorStack   *self,
                                                                     UnitySpatialPreviewMirror *mirror);
 
+void                     unity_spatial_mirror_stack_invalidate     (GtkNative                 *native);
+
 G_END_DECLS

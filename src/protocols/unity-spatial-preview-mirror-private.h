@@ -13,9 +13,11 @@
 
 G_BEGIN_DECLS
 
-gboolean unity_spatial_preview_mirror_sync        (UnitySpatialPreviewMirror *self);
+GdkRectangle unity_spatial_preview_mirror_snap_rect    (const graphene_rect_t     *rect);
 
-void     unity_spatial_preview_mirror_place_below (UnitySpatialPreviewMirror *self,
-                                                   struct wl_surface         *parent);
+gboolean     unity_spatial_preview_mirror_sync         (UnitySpatialPreviewMirror *self);
+
+void         unity_spatial_preview_mirror_place_above  (UnitySpatialPreviewMirror *self,
+                                                        struct wl_surface         *parent);
 
 G_END_DECLS

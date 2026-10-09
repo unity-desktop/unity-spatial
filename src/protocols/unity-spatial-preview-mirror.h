@@ -17,8 +17,8 @@ G_BEGIN_DECLS
  * UnitySpatialPreviewMirror:
  *
  * A live window in the widget's area. The compositor draws the window into a
- * subsurface below the widget's surface, so everything GTK draws in the same
- * surface shows above it.
+ * subsurface above the widget's surface, so it shows above everything GTK draws
+ * in the same surface. Input passes through it to the widgets below.
  */
 G_DECLARE_FINAL_TYPE (UnitySpatialPreviewMirror, unity_spatial_preview_mirror, UNITY_SPATIAL, PREVIEW_MIRROR, GtkWidget)
 

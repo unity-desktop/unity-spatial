@@ -7,9 +7,10 @@
 
 #include "unity-spatial-preview-mirror-private.h"
 
+#include <math.h>
+
 #include <gdk/wayland/gdkwayland.h>
 
-#include "unity-spatial-geometry-private.h"
 #include "unity-spatial-globals-private.h"
 #include "unity-spatial-mirror-stack-private.h"
 
@@ -57,7 +58,6 @@ attach (UnitySpatialPreviewMirror *self)
   self->shown      = FALSE;
 
   wl_surface_set_input_region (self->surface, globals->empty_region);
-  wl_subsurface_place_below (self->subsurface, parent);
 
   self->stack = unity_spatial_mirror_stack_get_for_native (native);
   unity_spatial_mirror_stack_add (self->stack, self);
@@ -77,6 +77,19 @@ detach (UnitySpatialPreviewMirror *self)
   g_clear_pointer (&self->surface, wl_surface_destroy);
 }
 
+GdkRectangle
+unity_spatial_preview_mirror_snap_rect (const graphene_rect_t *rect)
+{
+  gint x = round (rect->origin.x);
+  gint y = round (rect->origin.y);
+
+  return (GdkRectangle) {
+    x, y,
+    MAX (1, (gint) round (rect->origin.x + rect->size.width) - x),
+    MAX (1, (gint) round (rect->origin.y + rect->size.height) - y),
+  };
+}
+
 static gboolean
 widget_rect (UnitySpatialPreviewMirror *self,
              GdkRectangle              *rect)
@@ -88,12 +101,14 @@ widget_rect (UnitySpatialPreviewMirror *self,
 
   if (!gtk_widget_is_drawable (GTK_WIDGET (self)) ||
       !gtk_widget_compute_bounds (GTK_WIDGET (self), GTK_WIDGET (native), &bounds) ||
-      bounds.size.width < 1 || bounds.size.height < 1)
+      bounds.size.width < 1 || bounds.size.height < 1 ||
+      !graphene_rect_intersection (&bounds, &GRAPHENE_RECT_INIT (0, 0, gtk_widget_get_width (GTK_WIDGET (native)),
+                                                                 gtk_widget_get_height (GTK_WIDGET (native))), NULL))
     return FALSE;
 
   gtk_native_get_surface_transform (native, &dx, &dy);
   graphene_rect_offset (&bounds, dx, dy);
-  *rect = unity_spatial_snap_rect (&bounds);
+  *rect = unity_spatial_preview_mirror_snap_rect (&bounds);
 
   return TRUE;
 }
@@ -131,10 +146,10 @@ unity_spatial_preview_mirror_sync (UnitySpatialPreviewMirror *self)
 }
 
 void
-unity_spatial_preview_mirror_place_below (UnitySpatialPreviewMirror *self,
+unity_spatial_preview_mirror_place_above (UnitySpatialPreviewMirror *self,
                                           struct wl_surface         *parent)
 {
-  wl_subsurface_place_below (self->subsurface, parent);
+  wl_subsurface_place_above (self->subsurface, parent);
 }
 
 static void
