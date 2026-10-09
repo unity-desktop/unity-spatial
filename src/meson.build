@@ -92,7 +92,7 @@ gnome.generate_gir(
 executable(
   'unity-spatial',
   'unity-spatial-main.c',
-  dependencies: unity_spatial_dep,
+  dependencies: [unity_spatial_dep, dep_desktop_schemas],
   link_args: ['-Wl,--no-as-needed', '-lgtk4-layer-shell', '-Wl,--as-needed'],
   install: true,
 )

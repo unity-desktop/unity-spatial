@@ -19,6 +19,7 @@ struct _UnitySpatialView
 
   AdwToolbarView       *toolbar;
   AdwViewStack         *pages;
+  GtkSearchBar         *search_bar;
   GtkSearchEntry       *search;
   UnitySpatialCarousel *carousel;
   AdwAnimation         *animation;
@@ -65,12 +66,14 @@ apply_progress (UnitySpatialView *self,
 
   self->progress = progress;
   unity_spatial_carousel_set_progress (self->carousel, progress);
-  adw_toolbar_view_set_reveal_top_bars (self->toolbar, progress > UNITY_SPATIAL_PAGE_DESKTOP);
+  gtk_widget_set_opacity (GTK_WIDGET (self->search_bar), MIN (progress, UNITY_SPATIAL_PAGE_WINDOWS));
   gtk_widget_set_overflow (GTK_WIDGET (self->pages),
                            progress >= UNITY_SPATIAL_PAGE_WINDOWS ? GTK_OVERFLOW_HIDDEN : GTK_OVERFLOW_VISIBLE);
 
   current = unity_spatial_carousel_get_current (self->carousel);
-  if (current != NULL && progress == UNITY_SPATIAL_PAGE_WINDOWS)
+  if (self->enable_search && (progress == UNITY_SPATIAL_PAGE_WINDOWS || progress == UNITY_SPATIAL_PAGE_WORKSPACES))
+    gtk_widget_grab_focus (GTK_WIDGET (self->search));
+  else if (current != NULL && progress == UNITY_SPATIAL_PAGE_WINDOWS)
     gtk_widget_child_focus (GTK_WIDGET (current), GTK_DIR_TAB_FORWARD);
   else if (current != NULL && progress == UNITY_SPATIAL_PAGE_WORKSPACES)
     gtk_widget_grab_focus (GTK_WIDGET (current));
@@ -329,6 +332,7 @@ unity_spatial_view_class_init (UnitySpatialViewClass *klass)
   gtk_widget_class_set_template_from_resource (widget_class, "/org/unity/spatial/unity-spatial-view.ui");
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialView, toolbar);
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialView, pages);
+  gtk_widget_class_bind_template_child (widget_class, UnitySpatialView, search_bar);
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialView, search);
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialView, carousel);
   gtk_widget_class_bind_template_callback (widget_class, carousel_page_changed_cb);
