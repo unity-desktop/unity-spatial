@@ -23,6 +23,4 @@ gdouble                   unity_spatial_swipe_tracker_update (UnitySpatialSwipeT
 gdouble                   unity_spatial_swipe_tracker_end    (UnitySpatialSwipeTracker *self,
                                                               gboolean                  cancelled);
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC (UnitySpatialSwipeTracker, unity_spatial_swipe_tracker_free)
-
 G_END_DECLS

@@ -56,9 +56,12 @@ unity_spatial_swipe_tracker_update (UnitySpatialSwipeTracker *self,
                             guint32            time,
                             gdouble            delta)
 {
+  guint stale = 0;
+
   g_array_append_val (self->samples, ((Sample) { time, delta }));
-  while (self->samples->len > 1 && time - g_array_index (self->samples, Sample, 0).time > HISTORY_MS)
-    g_array_remove_index (self->samples, 0);
+  while (stale < self->samples->len - 1 && time - g_array_index (self->samples, Sample, stale).time > HISTORY_MS)
+    stale++;
+  g_array_remove_range (self->samples, 0, stale);
 
   self->value = CLAMP (self->value + delta / DISTANCE, self->lower, self->upper);
 
