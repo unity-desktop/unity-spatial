@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <template class="UnitySpatialWallpaperWindow" parent="UnityWindow">
+    <property name="namespace">unity-desktop</property>
+    <property name="layer">background</property>
+    <property name="anchor">top|bottom|left|right</property>
+    <property name="exclusivity">ignore</property>
+    <property name="keymode">none</property>
+    <property name="content">
+      <object class="GtkPicture" id="wallpaper">
+        <property name="content-fit">cover</property>
+      </object>
+    </property>
+  </template>
+</interface>
