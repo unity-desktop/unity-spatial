@@ -1,14 +1,7 @@
-windowthumbnail .badge,
-windowthumbnail .caption,
-windowthumbnail .close {
-  opacity: 0;
-  transition: opacity 150ms ease-out;
+workspacethumbnail {
+  transition: border-radius 250ms ease-out, box-shadow 250ms ease-out;
 }
 
-windowthumbnail.chrome .badge,
-windowthumbnail.chrome:hover .caption,
-windowthumbnail.chrome:hover .close,
-windowthumbnail.chrome windowcard:focus-visible ~ .caption,
-windowthumbnail.chrome windowcard:focus-visible ~ .close {
-  opacity: 1;
+workspacethumbnail:selected {
+  box-shadow: 0 0 0 6px var(--accent-bg-color);
 }
