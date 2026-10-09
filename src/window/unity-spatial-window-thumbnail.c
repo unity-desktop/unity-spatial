@@ -20,8 +20,12 @@ struct _UnitySpatialWindowThumbnail
   GtkImage                  *icon;
   GtkLabel                  *title;
   UnitySpatialPreviewMirror *preview;
-  GtkButton                 *close_button;
+  GtkRevealer               *title_revealer;
+  GtkRevealer               *close_revealer;
+  GtkRevealer               *icon_revealer;
+  GtkEventController        *motion;
   UnitySpatialWindowPage    *page;
+  gboolean                   chrome;
 };
 
 G_DEFINE_FINAL_TYPE (UnitySpatialWindowThumbnail, unity_spatial_window_thumbnail, GTK_TYPE_WIDGET)
@@ -97,6 +101,26 @@ update_title (UnitySpatialWindowThumbnail *self)
 }
 
 static void
+update_chrome (UnitySpatialWindowThumbnail *self)
+{
+  gboolean hover = self->chrome &&
+                   gtk_event_controller_motion_contains_pointer (GTK_EVENT_CONTROLLER_MOTION (self->motion));
+
+  gtk_revealer_set_reveal_child (self->title_revealer, hover);
+  gtk_revealer_set_reveal_child (self->close_revealer, hover);
+  gtk_revealer_set_reveal_child (self->icon_revealer, self->chrome);
+}
+
+static void
+bounds_changed_cb (UnitySpatialWindowThumbnail *self)
+{
+  const GdkRectangle *bounds = unity_spatial_window_page_get_bounds (self->page);
+
+  gtk_widget_set_visible (GTK_WIDGET (self), bounds->width > 0 && bounds->height > 0);
+  gtk_widget_queue_resize (GTK_WIDGET (self));
+}
+
+static void
 close_clicked_cb (UnitySpatialWindowThumbnail *self)
 {
   unity_spatial_window_view_close_page (unity_spatial_window_view_get_default (), self->page);
@@ -155,8 +179,12 @@ unity_spatial_window_thumbnail_class_init (UnitySpatialWindowThumbnailClass *kla
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, icon);
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, title);
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, preview);
-  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, close_button);
+  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, title_revealer);
+  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, close_revealer);
+  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, icon_revealer);
+  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, motion);
   gtk_widget_class_bind_template_callback (widget_class, close_clicked_cb);
+  gtk_widget_class_bind_template_callback (widget_class, update_chrome);
 
   gtk_widget_class_set_css_name (widget_class, "windowthumbnail");
 }
@@ -178,8 +206,10 @@ unity_spatial_window_thumbnail_new (UnitySpatialWindowPage *page)
   self->page = g_object_ref (page);
   update_icon (self);
   update_title (self);
+  bounds_changed_cb (self);
   g_signal_connect_object (page, "notify::app-id", G_CALLBACK (update_icon), self, G_CONNECT_SWAPPED);
   g_signal_connect_object (page, "notify::title", G_CALLBACK (update_title), self, G_CONNECT_SWAPPED);
+  g_signal_connect_object (page, "notify::bounds", G_CALLBACK (bounds_changed_cb), self, G_CONNECT_SWAPPED);
   unity_spatial_preview_mirror_set_view_id (self->preview, unity_spatial_window_page_get_view_id (page));
   gtk_actionable_set_action_target (GTK_ACTIONABLE (self->card), "u", unity_spatial_window_page_get_view_id (page));
 
@@ -200,9 +230,6 @@ unity_spatial_window_thumbnail_set_chrome_visible (UnitySpatialWindowThumbnail *
 {
   g_return_if_fail (UNITY_SPATIAL_IS_WINDOW_THUMBNAIL (self));
 
-  if (visible)
-    gtk_widget_add_css_class (GTK_WIDGET (self), "chrome");
-  else
-    gtk_widget_remove_css_class (GTK_WIDGET (self), "chrome");
-  gtk_widget_set_can_target (GTK_WIDGET (self->close_button), visible);
+  self->chrome = visible;
+  update_chrome (self);
 }

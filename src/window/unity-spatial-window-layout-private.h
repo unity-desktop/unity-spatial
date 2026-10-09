@@ -18,8 +18,6 @@ G_DECLARE_FINAL_TYPE (UnitySpatialWindowLayout, unity_spatial_window_layout, UNI
 void unity_spatial_window_layout_set_morph (UnitySpatialWindowLayout *self,
                                             gdouble                   morph);
 
-void unity_spatial_window_layout_repack    (UnitySpatialWindowLayout *self);
-
 void unity_spatial_window_layout_fly_from  (UnitySpatialWindowLayout *self,
                                             GtkWidget                *child,
                                             gdouble                   dx,

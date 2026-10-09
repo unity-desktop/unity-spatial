@@ -90,7 +90,8 @@ velocity (UnitySpatialSwipeTracker *self)
 
 gdouble
 unity_spatial_swipe_tracker_end (UnitySpatialSwipeTracker *self,
-                                 gboolean                  cancelled)
+                                 gboolean                  cancelled,
+                                 gdouble                  *progress_velocity)
 {
   gdouble speed = velocity (self);
   gdouble target;
@@ -103,6 +104,9 @@ unity_spatial_swipe_tracker_end (UnitySpatialSwipeTracker *self,
     target = ceil (self->value) - 1;
   else
     target = round (self->value);
+
+  if (progress_velocity != NULL)
+    *progress_velocity = cancelled ? 0 : speed * 1000 / DISTANCE;
 
   return CLAMP (target, self->lower, self->upper);
 }

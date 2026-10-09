@@ -32,6 +32,7 @@ struct _UnitySpatialWindowLayoutChild
 
   graphene_rect_t from;
   graphene_rect_t to;
+  GdkRectangle    frame;
   gboolean        placed;
   gboolean        appearing;
 };
@@ -47,7 +48,7 @@ struct _UnitySpatialWindowLayout
   gdouble       morph;
   gint          width;
   gint          height;
-  gboolean      dirty;
+  guint         n_placed;
 };
 
 G_DEFINE_FINAL_TYPE (UnitySpatialWindowLayout, unity_spatial_window_layout, GTK_TYPE_LAYOUT_MANAGER)
@@ -279,8 +280,9 @@ retarget (UnitySpatialWindowLayout *self,
   gint               output_width;
   gint               monitor = 0;
 
-  self->width  = width;
-  self->height = height;
+  self->width    = width;
+  self->height   = height;
+  self->n_placed = children->len;
   if (area.size.width <= 0 || area.size.height <= 0)
     return;
 
@@ -309,6 +311,7 @@ retarget (UnitySpatialWindowLayout *self,
     {
       UnitySpatialWindowLayoutChild *child = g_ptr_array_index (children, i);
 
+      child->frame     = *frame_of (child);
       child->appearing = animate && moved && !child->placed;
       child->from      = animate && moved && child->placed ? g_array_index (shown, graphene_rect_t, i) : child->to;
       child->placed    = TRUE;
@@ -323,6 +326,26 @@ retarget (UnitySpatialWindowLayout *self,
     {
       adw_animation_skip (self->reflow);
     }
+}
+
+static gboolean
+changed (UnitySpatialWindowLayout *self,
+         GPtrArray                *children,
+         gint                      width,
+         gint                      height)
+{
+  if (width != self->width || height != self->height || children->len != self->n_placed)
+    return TRUE;
+
+  for (guint i = 0; i < children->len; i++)
+    {
+      UnitySpatialWindowLayoutChild *child = g_ptr_array_index (children, i);
+
+      if (!child->placed || !gdk_rectangle_equal (&child->frame, frame_of (child)))
+        return TRUE;
+    }
+
+  return FALSE;
 }
 
 static void
@@ -363,9 +386,8 @@ unity_spatial_window_layout_allocate (GtkLayoutManager *manager,
     return;
 
 
-  if (self->dirty || width != self->width || height != self->height)
+  if (changed (self, children, width, height))
     retarget (self, widget, children, width, height);
-  self->dirty = FALSE;
 
   unity_spatial_workspace_view_get_output_size (unity_spatial_workspace_view_get_default (), &output_width,
                                                 &output_height);
@@ -441,7 +463,6 @@ unity_spatial_window_layout_init (UnitySpatialWindowLayout *self)
 {
   self->settle = 1;
   self->morph  = 1;
-  self->dirty  = TRUE;
 }
 
 void
@@ -454,15 +475,6 @@ unity_spatial_window_layout_set_morph (UnitySpatialWindowLayout *self,
     return;
 
   self->morph = morph;
-  gtk_widget_queue_allocate (gtk_layout_manager_get_widget (GTK_LAYOUT_MANAGER (self)));
-}
-
-void
-unity_spatial_window_layout_repack (UnitySpatialWindowLayout *self)
-{
-  g_return_if_fail (UNITY_SPATIAL_IS_WINDOW_LAYOUT (self));
-
-  self->dirty = TRUE;
   gtk_widget_queue_allocate (gtk_layout_manager_get_widget (GTK_LAYOUT_MANAGER (self)));
 }
 

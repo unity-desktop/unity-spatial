@@ -20,7 +20,7 @@ struct _UnitySpatialWindowGrid
   GtkWidget parent_instance;
 
   GListModel                  *model;
-  GHashTable                  *thumbnails;
+  GPtrArray                   *thumbnails;
   gdouble                      morph;
   gboolean                     wall;
   gboolean                     chrome;
@@ -61,66 +61,27 @@ update_chrome (UnitySpatialWindowGrid *self)
 }
 
 static void
-show_placed (GtkWidget              *thumbnail,
-             UnitySpatialWindowPage *page)
+items_changed_cb (UnitySpatialWindowGrid *self,
+                  guint                   position,
+                  guint                   removed,
+                  guint                   added)
 {
-  const GdkRectangle *bounds = unity_spatial_window_page_get_bounds (page);
+  for (guint i = 0; i < removed; i++)
+    gtk_widget_unparent (g_ptr_array_steal_index (self->thumbnails, position));
 
-  gtk_widget_set_visible (thumbnail, bounds->width > 0 && bounds->height > 0);
-}
-
-static void
-bounds_changed_cb (UnitySpatialWindowGrid *self,
-                   GParamSpec             *pspec,
-                   UnitySpatialWindowPage *page)
-{
-  GtkWidget *thumbnail = g_hash_table_lookup (self->thumbnails, page);
-
-  if (thumbnail != NULL)
-    show_placed (thumbnail, page);
-  unity_spatial_window_layout_repack (layout_of (self));
-}
-
-static void
-sync_thumbnails (UnitySpatialWindowGrid *self)
-{
-  g_autoptr (GHashTable) kept     = g_hash_table_new_full (NULL, NULL, g_object_unref, NULL);
-  GtkWidget             *previous = NULL;
-  GHashTableIter         iter;
-  gpointer               page;
-  gpointer               thumbnail;
-
-  for (guint i = g_list_model_get_n_items (self->model); i > 0; i--)
+  for (guint i = 0; i < added; i++)
     {
-      page      = g_list_model_get_item (self->model, i - 1);
-      thumbnail = g_hash_table_lookup (self->thumbnails, page);
+      g_autoptr (UnitySpatialWindowPage) page = g_list_model_get_item (self->model, position + i);
+      UnitySpatialWindowThumbnail       *thumbnail = unity_spatial_window_thumbnail_new (page);
+      GtkWidget                         *below     = position + i < self->thumbnails->len
+                                                     ? g_ptr_array_index (self->thumbnails, position + i)
+                                                     : NULL;
 
-      if (thumbnail == NULL)
-        {
-          thumbnail = unity_spatial_window_thumbnail_new (page);
-          g_signal_connect_object (page, "notify::bounds", G_CALLBACK (bounds_changed_cb), self, G_CONNECT_SWAPPED);
-          gtk_widget_set_parent (thumbnail, GTK_WIDGET (self));
-          show_placed (thumbnail, page);
-        }
-
-      gtk_widget_insert_after (thumbnail, GTK_WIDGET (self), previous);
-      g_hash_table_insert (kept, page, thumbnail);
-      previous = thumbnail;
+      gtk_widget_insert_after (GTK_WIDGET (thumbnail), GTK_WIDGET (self), below);
+      unity_spatial_window_thumbnail_set_chrome_visible (thumbnail, self->chrome);
+      g_ptr_array_insert (self->thumbnails, position + i, thumbnail);
     }
 
-  g_hash_table_iter_init (&iter, self->thumbnails);
-  while (g_hash_table_iter_next (&iter, &page, &thumbnail))
-    if (!g_hash_table_contains (kept, page))
-      {
-        g_signal_handlers_disconnect_by_func (page, bounds_changed_cb, self);
-        gtk_widget_unparent (thumbnail);
-      }
-
-  g_hash_table_unref (self->thumbnails);
-  self->thumbnails = g_steal_pointer (&kept);
-
-  apply_chrome (self);
-  unity_spatial_window_layout_repack (layout_of (self));
   unity_spatial_mirror_stack_invalidate (gtk_widget_get_native (GTK_WIDGET (self)));
 }
 
@@ -214,9 +175,9 @@ unity_spatial_window_grid_dispose (GObject *object)
     gtk_widget_remove_controller (gtk_event_controller_get_widget (self->drag_motion), g_steal_pointer (&self->drag_motion));
   g_clear_object (&self->model);
   g_clear_object (&self->dragged);
-  g_clear_pointer (&self->thumbnails, g_hash_table_unref);
   while ((child = gtk_widget_get_first_child (GTK_WIDGET (self))) != NULL)
     gtk_widget_unparent (child);
+  g_clear_pointer (&self->thumbnails, g_ptr_array_unref);
 
   G_OBJECT_CLASS (unity_spatial_window_grid_parent_class)->dispose (object);
 }
@@ -240,7 +201,7 @@ unity_spatial_window_grid_init (UnitySpatialWindowGrid *self)
 
   self->morph      = 1;
   self->chrome     = TRUE;
-  self->thumbnails = g_hash_table_new_full (NULL, NULL, g_object_unref, NULL);
+  self->thumbnails = g_ptr_array_new ();
 
   gtk_drag_source_set_actions (drag, GDK_ACTION_MOVE);
   g_signal_connect_swapped (drag, "prepare", G_CALLBACK (drag_prepare_cb), self);
@@ -258,8 +219,8 @@ unity_spatial_window_grid_set_model (UnitySpatialWindowGrid *self,
   g_return_if_fail (self->model == NULL);
 
   self->model = g_object_ref (model);
-  g_signal_connect_object (model, "items-changed", G_CALLBACK (sync_thumbnails), self, G_CONNECT_SWAPPED);
-  sync_thumbnails (self);
+  g_signal_connect_object (model, "items-changed", G_CALLBACK (items_changed_cb), self, G_CONNECT_SWAPPED);
+  items_changed_cb (self, 0, 0, g_list_model_get_n_items (model));
 }
 
 void

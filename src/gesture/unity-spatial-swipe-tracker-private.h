@@ -21,6 +21,7 @@ gdouble                   unity_spatial_swipe_tracker_update (UnitySpatialSwipeT
                                                               guint32                   time,
                                                               gdouble                   delta);
 gdouble                   unity_spatial_swipe_tracker_end    (UnitySpatialSwipeTracker *self,
-                                                              gboolean                  cancelled);
+                                                              gboolean                  cancelled,
+                                                              gdouble                  *progress_velocity);
 
 G_END_DECLS
