@@ -6,6 +6,7 @@
  */
 
 #include <adwaita.h>
+#include <gdesktop-enums.h>
 #include <libdex.h>
 
 #include "unity-spatial-desktop.h"
@@ -13,9 +14,9 @@
 static void
 color_scheme_changed_cb (GSettings *interface)
 {
-  g_autofree gchar *scheme = g_settings_get_string (interface, "color-scheme");
+  GDesktopColorScheme scheme = g_settings_get_enum (interface, "color-scheme");
 
-  adw_style_manager_set_color_scheme (adw_style_manager_get_default (), g_str_equal (scheme, "prefer-light")
+  adw_style_manager_set_color_scheme (adw_style_manager_get_default (), scheme == G_DESKTOP_COLOR_SCHEME_PREFER_LIGHT
                                                                           ? ADW_COLOR_SCHEME_FORCE_LIGHT
                                                                           : ADW_COLOR_SCHEME_FORCE_DARK);
 }

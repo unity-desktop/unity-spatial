@@ -8,10 +8,9 @@
     </property>
     <child>
       <object class="AdwToolbarView" id="toolbar">
-        <property name="top-bar-style">flat</property>
-        <property name="reveal-top-bars">False</property>
         <child type="top">
-          <object class="GtkSearchBar">
+          <object class="GtkSearchBar" id="search_bar">
+            <property name="opacity">0</property>
             <property name="search-mode-enabled">True</property>
             <property name="visible" bind-source="UnitySpatialView" bind-property="enable-search" bind-flags="sync-create"/>
             <property name="child">
