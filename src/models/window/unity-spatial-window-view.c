@@ -65,10 +65,13 @@ void
 unity_spatial_window_view_update (UnitySpatialWindowView *self,
                                   GArray                 *windows)
 {
-  g_autoptr (GPtrArray)  pages   = g_ptr_array_new_full (windows->len, g_object_unref);
-  g_autoptr (GHashTable) known   = g_hash_table_new (NULL, NULL);
-  gboolean               changed = windows->len != self->pages->len;
-  guint                  removed = self->pages->len;
+  g_autoptr (GPtrArray)  pages = g_ptr_array_new_full (windows->len, g_object_unref);
+  g_autoptr (GHashTable) known = g_hash_table_new (NULL, NULL);
+  g_autoptr (GArray)     moved = g_array_sized_new (FALSE, FALSE, sizeof (gboolean), windows->len);
+  guint                  old_len = self->pages->len;
+  guint                  shared;
+  guint                  start   = 0;
+  guint                  end     = 0;
 
   for (guint i = 0; i < self->pages->len; i++)
     g_hash_table_insert (known, GUINT_TO_POINTER (unity_spatial_window_page_get_view_id (g_ptr_array_index (self->pages, i))),
@@ -78,23 +81,29 @@ unity_spatial_window_view_update (UnitySpatialWindowView *self,
     {
       const UnitySpatialWindowState *state = &g_array_index (windows, UnitySpatialWindowState, i);
       UnitySpatialWindowPage        *page  = g_hash_table_lookup (known, GUINT_TO_POINTER (state->view_id));
+      gboolean                       move  = page != NULL && moves (page, state);
 
-      if (page == NULL)
-        page = unity_spatial_window_page_new (state->view_id);
-      else
-        g_object_ref (page);
-
-      changed |= i >= self->pages->len || g_ptr_array_index (self->pages, i) != page || moves (page, state);
+      page = page != NULL ? g_object_ref (page) : unity_spatial_window_page_new (state->view_id);
       unity_spatial_window_page_update (page, state);
       g_ptr_array_add (pages, page);
+      g_array_append_val (moved, move);
     }
 
-  if (changed)
-    {
-      g_ptr_array_unref (self->pages);
-      self->pages = g_steal_pointer (&pages);
-      g_list_model_items_changed (G_LIST_MODEL (self), 0, removed, self->pages->len);
-    }
+  shared = MIN (self->pages->len, pages->len);
+  while (start < shared && g_ptr_array_index (self->pages, start) == g_ptr_array_index (pages, start) &&
+         !g_array_index (moved, gboolean, start))
+    start++;
+  while (end < shared - start &&
+         g_ptr_array_index (self->pages, self->pages->len - 1 - end) == g_ptr_array_index (pages, pages->len - 1 - end) &&
+         !g_array_index (moved, gboolean, pages->len - 1 - end))
+    end++;
+
+  if (start + end == old_len && start + end == pages->len)
+    return;
+
+  g_ptr_array_unref (self->pages);
+  self->pages = g_steal_pointer (&pages);
+  g_list_model_items_changed (G_LIST_MODEL (self), start, old_len - start - end, self->pages->len - start - end);
 }
 
 static void

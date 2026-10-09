@@ -19,7 +19,6 @@ typedef struct
   GdkRectangle bounds;
   gint         workspace_x;
   gint         workspace_y;
-  gboolean     minimized;
 } UnitySpatialWindowState;
 
 UnitySpatialWindowPage *unity_spatial_window_page_new           (guint                          view_id);

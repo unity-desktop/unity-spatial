@@ -70,12 +70,4 @@ gint                unity_spatial_window_page_get_workspace_x (UnitySpatialWindo
  */
 gint                unity_spatial_window_page_get_workspace_y (UnitySpatialWindowPage *self);
 
-/**
- * unity_spatial_window_page_get_minimized:
- * @self: a #UnitySpatialWindowPage
- *
- * Returns: %TRUE if the window is minimized
- */
-gboolean            unity_spatial_window_page_get_minimized   (UnitySpatialWindowPage *self);
-
 G_END_DECLS

@@ -17,7 +17,6 @@ struct _UnitySpatialWindowPage
   GdkRectangle bounds;
   gint         workspace_x;
   gint         workspace_y;
-  gboolean     minimized;
 };
 
 G_DEFINE_FINAL_TYPE (UnitySpatialWindowPage, unity_spatial_window_page, G_TYPE_OBJECT)
@@ -30,10 +29,9 @@ typedef enum
   PROP_BOUNDS,
   PROP_WORKSPACE_X,
   PROP_WORKSPACE_Y,
-  PROP_MINIMIZED,
 } UnitySpatialWindowPageProperty;
 
-static GParamSpec *properties[PROP_MINIMIZED + 1];
+static GParamSpec *properties[PROP_WORKSPACE_Y + 1];
 
 static void
 unity_spatial_window_page_finalize (GObject *object)
@@ -74,9 +72,6 @@ unity_spatial_window_page_get_property (GObject    *object,
     case PROP_WORKSPACE_Y:
       g_value_set_int (value, self->workspace_y);
       break;
-    case PROP_MINIMIZED:
-      g_value_set_boolean (value, self->minimized);
-      break;
     }
 }
 
@@ -106,9 +101,6 @@ unity_spatial_window_page_class_init (UnitySpatialWindowPageClass *klass)
   properties[PROP_WORKSPACE_Y] =
     g_param_spec_int ("workspace-y", NULL, NULL, 0, G_MAXINT, 0,
                       G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
-  properties[PROP_MINIMIZED] =
-    g_param_spec_boolean ("minimized", NULL, NULL, FALSE,
-                          G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, G_N_ELEMENTS (properties), properties);
 }
@@ -161,7 +153,6 @@ unity_spatial_window_page_update (UnitySpatialWindowPage        *self,
 
   set_string (self, &self->app_id, state->app_id, PROP_APP_ID);
   set_string (self, &self->title, state->title, PROP_TITLE);
-  set_int (self, &self->minimized, !!state->minimized, PROP_MINIMIZED);
   unity_spatial_window_page_set_workspace (self, state->workspace_x, state->workspace_y);
 
   if (!gdk_rectangle_equal (&self->bounds, &state->bounds))
@@ -232,12 +223,4 @@ unity_spatial_window_page_get_workspace_y (UnitySpatialWindowPage *self)
   g_return_val_if_fail (UNITY_SPATIAL_IS_WINDOW_PAGE (self), 0);
 
   return self->workspace_y;
-}
-
-gboolean
-unity_spatial_window_page_get_minimized (UnitySpatialWindowPage *self)
-{
-  g_return_val_if_fail (UNITY_SPATIAL_IS_WINDOW_PAGE (self), FALSE);
-
-  return self->minimized;
 }
