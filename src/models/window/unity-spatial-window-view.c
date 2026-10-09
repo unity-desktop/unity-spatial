@@ -53,21 +53,6 @@ unity_spatial_window_view_list_model_init (GListModelInterface *iface)
   iface->get_item      = unity_spatial_window_view_get_item;
 }
 
-static UnitySpatialWindowPage *
-find_page (UnitySpatialWindowView *self,
-           guint                   view_id)
-{
-  for (guint i = 0; i < self->pages->len; i++)
-    {
-      UnitySpatialWindowPage *page = g_ptr_array_index (self->pages, i);
-
-      if (unity_spatial_window_page_get_view_id (page) == view_id)
-        return page;
-    }
-
-  return NULL;
-}
-
 static gboolean
 moves (UnitySpatialWindowPage        *page,
        const UnitySpatialWindowState *state)
@@ -80,16 +65,19 @@ void
 unity_spatial_window_view_update (UnitySpatialWindowView *self,
                                   GArray                 *windows)
 {
-  g_autoptr (GPtrArray) pages   = g_ptr_array_new_full (windows->len, g_object_unref);
-  gboolean              changed = windows->len != self->pages->len;
-  guint                 removed = self->pages->len;
+  g_autoptr (GPtrArray)  pages   = g_ptr_array_new_full (windows->len, g_object_unref);
+  g_autoptr (GHashTable) known   = g_hash_table_new (NULL, NULL);
+  gboolean               changed = windows->len != self->pages->len;
+  guint                  removed = self->pages->len;
 
-  g_return_if_fail (UNITY_SPATIAL_IS_WINDOW_VIEW (self));
+  for (guint i = 0; i < self->pages->len; i++)
+    g_hash_table_insert (known, GUINT_TO_POINTER (unity_spatial_window_page_get_view_id (g_ptr_array_index (self->pages, i))),
+                         g_ptr_array_index (self->pages, i));
 
   for (guint i = 0; i < windows->len; i++)
     {
       const UnitySpatialWindowState *state = &g_array_index (windows, UnitySpatialWindowState, i);
-      UnitySpatialWindowPage        *page  = find_page (self, state->view_id);
+      UnitySpatialWindowPage        *page  = g_hash_table_lookup (known, GUINT_TO_POINTER (state->view_id));
 
       if (page == NULL)
         page = unity_spatial_window_page_new (state->view_id);

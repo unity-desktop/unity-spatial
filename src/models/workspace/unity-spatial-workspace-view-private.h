@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <libdex.h>
+
 #include "unity-spatial-workspace-view.h"
 
 G_BEGIN_DECLS
@@ -24,7 +26,10 @@ typedef struct
   gint         y;
 } UnitySpatialOutputState;
 
-void unity_spatial_workspace_view_update (UnitySpatialWorkspaceView     *self,
-                                          const UnitySpatialOutputState *output);
+void       unity_spatial_workspace_view_update (UnitySpatialWorkspaceView     *self,
+                                                const UnitySpatialOutputState *output);
+
+DexFuture *unity_spatial_workspace_view_switch (UnitySpatialWorkspaceView     *self,
+                                                UnitySpatialWorkspacePage     *workspace);
 
 G_END_DECLS

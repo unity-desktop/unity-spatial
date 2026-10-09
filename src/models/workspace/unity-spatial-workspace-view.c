@@ -301,18 +301,26 @@ unity_spatial_workspace_view_get_desktop_view_id (UnitySpatialWorkspaceView *sel
   return self->desktop_view_id;
 }
 
-void
-unity_spatial_workspace_view_activate (UnitySpatialWorkspaceView *self,
-                                       UnitySpatialWorkspacePage *workspace)
+DexFuture *
+unity_spatial_workspace_view_switch (UnitySpatialWorkspaceView *self,
+                                     UnitySpatialWorkspacePage *workspace)
 {
   gint x;
   gint y;
 
-  g_return_if_fail (UNITY_SPATIAL_IS_WORKSPACE_VIEW (self));
-  g_return_if_fail (UNITY_SPATIAL_IS_WORKSPACE_PAGE (workspace));
+  g_return_val_if_fail (UNITY_SPATIAL_IS_WORKSPACE_VIEW (self), NULL);
+  g_return_val_if_fail (UNITY_SPATIAL_IS_WORKSPACE_PAGE (workspace), NULL);
 
   x = unity_spatial_workspace_page_get_x (workspace);
   y = unity_spatial_workspace_page_get_y (workspace);
-  unity_spatial_wayfire_set_workspace (unity_spatial_wayfire_get_default (), x, y);
   set_current (self, x, y);
+
+  return unity_spatial_wayfire_set_workspace (unity_spatial_wayfire_get_default (), x, y);
+}
+
+void
+unity_spatial_workspace_view_activate (UnitySpatialWorkspaceView *self,
+                                       UnitySpatialWorkspacePage *workspace)
+{
+  dex_future_disown (unity_spatial_workspace_view_switch (self, workspace));
 }

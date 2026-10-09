@@ -45,38 +45,18 @@ unity_spatial_workspace_page_get_property (GObject    *object,
 }
 
 static void
-unity_spatial_workspace_page_set_property (GObject      *object,
-                                           guint         prop_id,
-                                           const GValue *value,
-                                           GParamSpec   *pspec)
-{
-  UnitySpatialWorkspacePage *self = UNITY_SPATIAL_WORKSPACE_PAGE (object);
-
-  switch ((UnitySpatialWorkspacePageProperty) prop_id)
-    {
-    case PROP_X:
-      self->x = g_value_get_int (value);
-      break;
-    case PROP_Y:
-      self->y = g_value_get_int (value);
-      break;
-    }
-}
-
-static void
 unity_spatial_workspace_page_class_init (UnitySpatialWorkspacePageClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->get_property = unity_spatial_workspace_page_get_property;
-  object_class->set_property = unity_spatial_workspace_page_set_property;
 
   properties[PROP_X] =
     g_param_spec_int ("x", NULL, NULL, 0, G_MAXINT, 0,
-                      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+                      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
   properties[PROP_Y] =
     g_param_spec_int ("y", NULL, NULL, 0, G_MAXINT, 0,
-                      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+                      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, G_N_ELEMENTS (properties), properties);
 }
@@ -90,7 +70,12 @@ UnitySpatialWorkspacePage *
 unity_spatial_workspace_page_new (gint x,
                                   gint y)
 {
-  return g_object_new (UNITY_SPATIAL_TYPE_WORKSPACE_PAGE, "x", x, "y", y, NULL);
+  UnitySpatialWorkspacePage *self = g_object_new (UNITY_SPATIAL_TYPE_WORKSPACE_PAGE, NULL);
+
+  self->x = x;
+  self->y = y;
+
+  return self;
 }
 
 gint
