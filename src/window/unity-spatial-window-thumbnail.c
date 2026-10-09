@@ -16,16 +16,9 @@ struct _UnitySpatialWindowThumbnail
 {
   GtkWidget parent_instance;
 
-  GtkButton                 *card;
-  GtkImage                  *icon;
-  GtkLabel                  *title;
-  UnitySpatialPreviewMirror *preview;
-  GtkRevealer               *title_revealer;
-  GtkRevealer               *close_revealer;
-  GtkRevealer               *icon_revealer;
-  GtkEventController        *motion;
-  UnitySpatialWindowPage    *page;
-  gboolean                   chrome;
+  GtkButton              *card;
+  UnitySpatialWindowPage *page;
+  gboolean                chrome;
 };
 
 G_DEFINE_FINAL_TYPE (UnitySpatialWindowThumbnail, unity_spatial_window_thumbnail, GTK_TYPE_WIDGET)
@@ -33,9 +26,10 @@ G_DEFINE_FINAL_TYPE (UnitySpatialWindowThumbnail, unity_spatial_window_thumbnail
 typedef enum
 {
   PROP_PAGE = 1,
+  PROP_CHROME,
 } UnitySpatialWindowThumbnailProperty;
 
-static GParamSpec *properties[PROP_PAGE + 1];
+static GParamSpec *properties[PROP_CHROME + 1];
 
 static AstalAppsApps *
 get_apps (void)
@@ -77,38 +71,48 @@ find_app (const gchar *app_id)
   return found;
 }
 
-static void
-update_icon (UnitySpatialWindowThumbnail *self)
+static GHashTable *
+icon_names (void)
 {
-  const gchar          *app_id = unity_spatial_window_page_get_app_id (self->page);
-  AstalAppsApplication *app    = app_id != NULL && *app_id != '\0' ? find_app (app_id) : NULL;
-  const gchar          *icon   = app != NULL ? astal_apps_application_get_icon_name (app) : NULL;
-  g_autoptr (GIcon)     gicon  = icon != NULL && *icon != '\0' ? g_icon_new_for_string (icon, NULL) : NULL;
+  static GHashTable *names;
 
-  if (gicon != NULL)
-    gtk_image_set_from_gicon (self->icon, gicon);
-  else
-    gtk_image_set_from_icon_name (self->icon, "application-x-executable");
+  if (g_once_init_enter_pointer (&names))
+    {
+      GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+
+      g_signal_connect_swapped (get_apps (), "notify::list", G_CALLBACK (g_hash_table_remove_all), table);
+      g_once_init_leave_pointer (&names, table);
+    }
+
+  return names;
 }
 
-static void
-update_title (UnitySpatialWindowThumbnail *self)
+static GIcon *
+icon_for_app_id (UnitySpatialWindowThumbnail *self,
+                 const gchar                 *app_id)
 {
-  const gchar *title = unity_spatial_window_page_get_title (self->page);
+  const gchar *icon = NULL;
+  GIcon       *gicon;
 
-  gtk_label_set_label (self->title, title);
-  gtk_accessible_update_property (GTK_ACCESSIBLE (self->card), GTK_ACCESSIBLE_PROPERTY_LABEL, title, -1);
+  if (app_id != NULL && *app_id != '\0' && !g_hash_table_lookup_extended (icon_names (), app_id, NULL, (gpointer *) &icon))
+    {
+      AstalAppsApplication *app = find_app (app_id);
+
+      icon = app != NULL ? astal_apps_application_get_icon_name (app) : NULL;
+      g_hash_table_insert (icon_names (), g_strdup (app_id), g_strdup (icon));
+    }
+
+  gicon = icon != NULL && *icon != '\0' ? g_icon_new_for_string (icon, NULL) : NULL;
+
+  return gicon != NULL ? gicon : g_themed_icon_new ("application-x-executable");
 }
 
-static void
-update_chrome (UnitySpatialWindowThumbnail *self)
+static gboolean
+shows_hover_chrome (UnitySpatialWindowThumbnail *self,
+                    gboolean                     chrome,
+                    gboolean                     contains_pointer)
 {
-  gboolean hover = self->chrome &&
-                   gtk_event_controller_motion_contains_pointer (GTK_EVENT_CONTROLLER_MOTION (self->motion));
-
-  gtk_revealer_set_reveal_child (self->title_revealer, hover);
-  gtk_revealer_set_reveal_child (self->close_revealer, hover);
-  gtk_revealer_set_reveal_child (self->icon_revealer, self->chrome);
+  return chrome && contains_pointer;
 }
 
 static void
@@ -127,14 +131,23 @@ close_clicked_cb (UnitySpatialWindowThumbnail *self)
 }
 
 static void
+unity_spatial_window_thumbnail_constructed (GObject *object)
+{
+  UnitySpatialWindowThumbnail *self = UNITY_SPATIAL_WINDOW_THUMBNAIL (object);
+
+  G_OBJECT_CLASS (unity_spatial_window_thumbnail_parent_class)->constructed (object);
+
+  g_signal_connect_object (self->page, "notify::bounds", G_CALLBACK (bounds_changed_cb), self, G_CONNECT_SWAPPED);
+  bounds_changed_cb (self);
+  gtk_actionable_set_action_target (GTK_ACTIONABLE (self->card), "u", unity_spatial_window_page_get_view_id (self->page));
+}
+
+static void
 unity_spatial_window_thumbnail_dispose (GObject *object)
 {
   UnitySpatialWindowThumbnail *self = UNITY_SPATIAL_WINDOW_THUMBNAIL (object);
-  GtkWidget                   *child;
 
   gtk_widget_dispose_template (GTK_WIDGET (self), UNITY_SPATIAL_TYPE_WINDOW_THUMBNAIL);
-  while ((child = gtk_widget_get_first_child (GTK_WIDGET (self))) != NULL)
-    gtk_widget_unparent (child);
   g_clear_object (&self->page);
 
   G_OBJECT_CLASS (unity_spatial_window_thumbnail_parent_class)->dispose (object);
@@ -153,6 +166,31 @@ unity_spatial_window_thumbnail_get_property (GObject    *object,
     case PROP_PAGE:
       g_value_set_object (value, self->page);
       break;
+    case PROP_CHROME:
+      g_value_set_boolean (value, self->chrome);
+      break;
+    }
+}
+
+static void
+unity_spatial_window_thumbnail_set_property (GObject      *object,
+                                             guint         prop_id,
+                                             const GValue *value,
+                                             GParamSpec   *pspec)
+{
+  UnitySpatialWindowThumbnail *self = UNITY_SPATIAL_WINDOW_THUMBNAIL (object);
+
+  switch ((UnitySpatialWindowThumbnailProperty) prop_id)
+    {
+    case PROP_PAGE:
+      self->page = g_value_dup_object (value);
+      break;
+    case PROP_CHROME:
+      if (self->chrome == g_value_get_boolean (value))
+        break;
+      self->chrome = g_value_get_boolean (value);
+      g_object_notify_by_pspec (object, pspec);
+      break;
     }
 }
 
@@ -162,29 +200,43 @@ unity_spatial_window_thumbnail_class_init (UnitySpatialWindowThumbnailClass *kla
   GObjectClass   *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
+  object_class->constructed  = unity_spatial_window_thumbnail_constructed;
   object_class->dispose      = unity_spatial_window_thumbnail_dispose;
   object_class->get_property = unity_spatial_window_thumbnail_get_property;
+  object_class->set_property = unity_spatial_window_thumbnail_set_property;
 
+  /**
+   * UnitySpatialWindowThumbnail:page:
+   *
+   * The window that the thumbnail shows.
+   */
   properties[PROP_PAGE] =
     g_param_spec_object ("page", NULL, NULL, UNITY_SPATIAL_TYPE_WINDOW_PAGE,
-                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+                         G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  /**
+   * UnitySpatialWindowThumbnail:chrome:
+   *
+   * Whether the app icon shows, and the title and close button show on hover.
+   */
+  properties[PROP_CHROME] =
+    g_param_spec_boolean ("chrome", NULL, NULL, FALSE,
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, G_N_ELEMENTS (properties), properties);
 
   g_type_ensure (UNITY_SPATIAL_TYPE_PREVIEW_MIRROR);
+  g_type_ensure (UNITY_SPATIAL_TYPE_WINDOW_PAGE);
 
   gtk_widget_class_set_template_from_resource (widget_class,
                                                "/org/unity/spatial/unity-spatial-window-thumbnail.ui");
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, card);
-  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, icon);
-  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, title);
-  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, preview);
-  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, title_revealer);
-  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, close_revealer);
-  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, icon_revealer);
-  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWindowThumbnail, motion);
+  gtk_widget_class_bind_template_child_full (widget_class, "title_revealer", FALSE, 0);
+  gtk_widget_class_bind_template_child_full (widget_class, "close_revealer", FALSE, 0);
+  gtk_widget_class_bind_template_child_full (widget_class, "icon_revealer", FALSE, 0);
   gtk_widget_class_bind_template_callback (widget_class, close_clicked_cb);
-  gtk_widget_class_bind_template_callback (widget_class, update_chrome);
+  gtk_widget_class_bind_template_callback (widget_class, icon_for_app_id);
+  gtk_widget_class_bind_template_callback (widget_class, shows_hover_chrome);
 
   gtk_widget_class_set_css_name (widget_class, "windowthumbnail");
 }
@@ -198,22 +250,9 @@ unity_spatial_window_thumbnail_init (UnitySpatialWindowThumbnail *self)
 UnitySpatialWindowThumbnail *
 unity_spatial_window_thumbnail_new (UnitySpatialWindowPage *page)
 {
-  UnitySpatialWindowThumbnail *self;
-
   g_return_val_if_fail (UNITY_SPATIAL_IS_WINDOW_PAGE (page), NULL);
 
-  self       = g_object_new (UNITY_SPATIAL_TYPE_WINDOW_THUMBNAIL, NULL);
-  self->page = g_object_ref (page);
-  update_icon (self);
-  update_title (self);
-  bounds_changed_cb (self);
-  g_signal_connect_object (page, "notify::app-id", G_CALLBACK (update_icon), self, G_CONNECT_SWAPPED);
-  g_signal_connect_object (page, "notify::title", G_CALLBACK (update_title), self, G_CONNECT_SWAPPED);
-  g_signal_connect_object (page, "notify::bounds", G_CALLBACK (bounds_changed_cb), self, G_CONNECT_SWAPPED);
-  unity_spatial_preview_mirror_set_view_id (self->preview, unity_spatial_window_page_get_view_id (page));
-  gtk_actionable_set_action_target (GTK_ACTIONABLE (self->card), "u", unity_spatial_window_page_get_view_id (page));
-
-  return self;
+  return g_object_new (UNITY_SPATIAL_TYPE_WINDOW_THUMBNAIL, "page", page, NULL);
 }
 
 UnitySpatialWindowPage *
@@ -222,14 +261,4 @@ unity_spatial_window_thumbnail_get_page (UnitySpatialWindowThumbnail *self)
   g_return_val_if_fail (UNITY_SPATIAL_IS_WINDOW_THUMBNAIL (self), NULL);
 
   return self->page;
-}
-
-void
-unity_spatial_window_thumbnail_set_chrome_visible (UnitySpatialWindowThumbnail *self,
-                                                   gboolean                     visible)
-{
-  g_return_if_fail (UNITY_SPATIAL_IS_WINDOW_THUMBNAIL (self));
-
-  self->chrome = visible;
-  update_chrome (self);
 }

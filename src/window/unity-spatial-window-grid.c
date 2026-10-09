@@ -34,18 +34,20 @@ struct _UnitySpatialWindowGrid
 
 G_DEFINE_FINAL_TYPE (UnitySpatialWindowGrid, unity_spatial_window_grid, GTK_TYPE_WIDGET)
 
+typedef enum
+{
+  PROP_MORPH = 1,
+  PROP_WALL,
+  PROP_CHROME,
+  PROP_SPACING,
+} UnitySpatialWindowGridProperty;
+
+static GParamSpec *properties[PROP_SPACING + 1];
+
 static UnitySpatialWindowLayout *
 layout_of (UnitySpatialWindowGrid *self)
 {
   return UNITY_SPATIAL_WINDOW_LAYOUT (gtk_widget_get_layout_manager (GTK_WIDGET (self)));
-}
-
-static void
-apply_chrome (UnitySpatialWindowGrid *self)
-{
-  for (GtkWidget *child = gtk_widget_get_first_child (GTK_WIDGET (self)); child != NULL;
-       child = gtk_widget_get_next_sibling (child))
-    unity_spatial_window_thumbnail_set_chrome_visible (UNITY_SPATIAL_WINDOW_THUMBNAIL (child), self->chrome);
 }
 
 static void
@@ -57,7 +59,7 @@ update_chrome (UnitySpatialWindowGrid *self)
     return;
 
   self->chrome = chrome;
-  apply_chrome (self);
+  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_CHROME]);
 }
 
 static void
@@ -66,21 +68,36 @@ items_changed_cb (UnitySpatialWindowGrid *self,
                   guint                   removed,
                   guint                   added)
 {
+  g_autoptr (GHashTable) kept = g_hash_table_new (NULL, NULL);
+  GHashTableIter         iter;
+  gpointer               thumbnail;
+
   for (guint i = 0; i < removed; i++)
-    gtk_widget_unparent (g_ptr_array_steal_index (self->thumbnails, position));
+    {
+      thumbnail = g_ptr_array_steal_index (self->thumbnails, position);
+      g_hash_table_insert (kept, unity_spatial_window_thumbnail_get_page (thumbnail), thumbnail);
+    }
 
   for (guint i = 0; i < added; i++)
     {
-      g_autoptr (UnitySpatialWindowPage) page = g_list_model_get_item (self->model, position + i);
-      UnitySpatialWindowThumbnail       *thumbnail = unity_spatial_window_thumbnail_new (page);
-      GtkWidget                         *below     = position + i < self->thumbnails->len
-                                                     ? g_ptr_array_index (self->thumbnails, position + i)
-                                                     : NULL;
+      g_autoptr (UnitySpatialWindowPage) page  = g_list_model_get_item (self->model, position + i);
+      GtkWidget                         *below = position + i < self->thumbnails->len
+                                                 ? g_ptr_array_index (self->thumbnails, position + i)
+                                                 : NULL;
 
-      gtk_widget_insert_after (GTK_WIDGET (thumbnail), GTK_WIDGET (self), below);
-      unity_spatial_window_thumbnail_set_chrome_visible (thumbnail, self->chrome);
+      if (!g_hash_table_steal_extended (kept, page, NULL, &thumbnail))
+        {
+          thumbnail = unity_spatial_window_thumbnail_new (page);
+          g_object_bind_property (self, "chrome", thumbnail, "chrome", G_BINDING_SYNC_CREATE);
+        }
+
+      gtk_widget_insert_after (thumbnail, GTK_WIDGET (self), below);
       g_ptr_array_insert (self->thumbnails, position + i, thumbnail);
     }
+
+  g_hash_table_iter_init (&iter, kept);
+  while (g_hash_table_iter_next (&iter, NULL, &thumbnail))
+    gtk_widget_unparent (thumbnail);
 
   unity_spatial_mirror_stack_invalidate (gtk_widget_get_native (GTK_WIDGET (self)));
 }
@@ -154,7 +171,7 @@ drag_end_cb (UnitySpatialWindowGrid *self,
     gtk_widget_remove_controller (native, self->drag_motion);
   self->drag_motion = NULL;
 
-  if (self->dragged != NULL && !moved)
+  if (self->dragged != NULL && !moved && gtk_widget_get_parent (GTK_WIDGET (self->dragged)) == GTK_WIDGET (self))
     {
       if (gtk_widget_compute_point (native, GTK_WIDGET (self), &GRAPHENE_POINT_INIT (self->pointer_x, self->pointer_y),
                                     &end))
@@ -183,12 +200,111 @@ unity_spatial_window_grid_dispose (GObject *object)
 }
 
 static void
+unity_spatial_window_grid_get_property (GObject    *object,
+                                        guint       prop_id,
+                                        GValue     *value,
+                                        GParamSpec *pspec)
+{
+  UnitySpatialWindowGrid *self = UNITY_SPATIAL_WINDOW_GRID (object);
+
+  switch ((UnitySpatialWindowGridProperty) prop_id)
+    {
+    case PROP_MORPH:
+      g_value_set_double (value, self->morph);
+      break;
+    case PROP_WALL:
+      g_value_set_boolean (value, self->wall);
+      break;
+    case PROP_CHROME:
+      g_value_set_boolean (value, self->chrome);
+      break;
+    case PROP_SPACING:
+      g_object_get_property (G_OBJECT (layout_of (self)), "spacing", value);
+      break;
+    }
+}
+
+static void
+unity_spatial_window_grid_set_property (GObject      *object,
+                                        guint         prop_id,
+                                        const GValue *value,
+                                        GParamSpec   *pspec)
+{
+  UnitySpatialWindowGrid *self = UNITY_SPATIAL_WINDOW_GRID (object);
+
+  switch ((UnitySpatialWindowGridProperty) prop_id)
+    {
+    case PROP_MORPH:
+      if (G_APPROX_VALUE (self->morph, g_value_get_double (value), DBL_EPSILON))
+        break;
+      self->morph = g_value_get_double (value);
+      update_chrome (self);
+      g_object_notify_by_pspec (object, pspec);
+      break;
+    case PROP_WALL:
+      if (self->wall == g_value_get_boolean (value))
+        break;
+      self->wall = g_value_get_boolean (value);
+      gtk_widget_set_can_focus (GTK_WIDGET (self), !self->wall);
+      update_chrome (self);
+      g_object_notify_by_pspec (object, pspec);
+      break;
+    case PROP_SPACING:
+      g_object_set_property (G_OBJECT (layout_of (self)), "spacing", value);
+      break;
+    case PROP_CHROME:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+    }
+}
+
+static void
 unity_spatial_window_grid_class_init (UnitySpatialWindowGridClass *klass)
 {
   GObjectClass   *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
-  object_class->dispose = unity_spatial_window_grid_dispose;
+  object_class->dispose      = unity_spatial_window_grid_dispose;
+  object_class->get_property = unity_spatial_window_grid_get_property;
+  object_class->set_property = unity_spatial_window_grid_set_property;
+
+  /**
+   * UnitySpatialWindowGrid:morph:
+   *
+   * The position between the windows where they are on the desktop (0) and
+   * their places in the grid (1).
+   */
+  properties[PROP_MORPH] =
+    g_param_spec_double ("morph", NULL, NULL, 0, 1, 1,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  /**
+   * UnitySpatialWindowGrid:wall:
+   *
+   * Whether the grid shows on the workspaces page, where its windows are
+   * small and show no chrome.
+   */
+  properties[PROP_WALL] =
+    g_param_spec_boolean ("wall", NULL, NULL, FALSE,
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  /**
+   * UnitySpatialWindowGrid:chrome:
+   *
+   * Whether the windows show their chrome: on the windows page only.
+   */
+  properties[PROP_CHROME] =
+    g_param_spec_boolean ("chrome", NULL, NULL, TRUE, G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  /**
+   * UnitySpatialWindowGrid:spacing:
+   *
+   * The gap between two windows, in pixels.
+   */
+  properties[PROP_SPACING] =
+    g_param_spec_int ("spacing", NULL, NULL, 0, G_MAXINT, 0, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (object_class, G_N_ELEMENTS (properties), properties);
 
   gtk_widget_class_set_layout_manager_type (widget_class, UNITY_SPATIAL_TYPE_WINDOW_LAYOUT);
   gtk_widget_class_set_css_name (widget_class, "windowgrid");
@@ -202,6 +318,8 @@ unity_spatial_window_grid_init (UnitySpatialWindowGrid *self)
   self->morph      = 1;
   self->chrome     = TRUE;
   self->thumbnails = g_ptr_array_new ();
+
+  g_object_bind_property (self, "morph", layout_of (self), "morph", G_BINDING_SYNC_CREATE);
 
   gtk_drag_source_set_actions (drag, GDK_ACTION_MOVE);
   g_signal_connect_swapped (drag, "prepare", G_CALLBACK (drag_prepare_cb), self);
@@ -221,31 +339,4 @@ unity_spatial_window_grid_set_model (UnitySpatialWindowGrid *self,
   self->model = g_object_ref (model);
   g_signal_connect_object (model, "items-changed", G_CALLBACK (items_changed_cb), self, G_CONNECT_SWAPPED);
   items_changed_cb (self, 0, 0, g_list_model_get_n_items (model));
-}
-
-void
-unity_spatial_window_grid_set_morph (UnitySpatialWindowGrid *self,
-                                     gdouble                 morph)
-{
-  g_return_if_fail (UNITY_SPATIAL_IS_WINDOW_GRID (self));
-
-  if (G_APPROX_VALUE (self->morph, morph, DBL_EPSILON))
-    return;
-
-  self->morph = morph;
-  unity_spatial_window_layout_set_morph (layout_of (self), morph);
-  update_chrome (self);
-}
-
-void
-unity_spatial_window_grid_set_wall (UnitySpatialWindowGrid *self,
-                                    gboolean                wall)
-{
-  g_return_if_fail (UNITY_SPATIAL_IS_WINDOW_GRID (self));
-
-  if (self->wall == wall)
-    return;
-
-  self->wall = wall;
-  update_chrome (self);
 }

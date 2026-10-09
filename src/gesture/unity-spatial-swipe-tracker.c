@@ -9,7 +9,6 @@
 
 #include <math.h>
 
-#define DISTANCE   300.0
 #define FLING      0.6
 #define HISTORY_MS 150
 
@@ -25,16 +24,19 @@ struct _UnitySpatialSwipeTracker
   gdouble lower;
   gdouble upper;
   gdouble value;
+  gdouble distance;
   GArray *samples;
 };
 
 UnitySpatialSwipeTracker *
 unity_spatial_swipe_tracker_new (gdouble from,
                                  gdouble lower,
-                                 gdouble upper)
+                                 gdouble upper,
+                                 gdouble distance)
 {
   UnitySpatialSwipeTracker *self = g_new0 (UnitySpatialSwipeTracker, 1);
 
+  self->distance = MAX (distance, 1);
   self->lower   = lower;
   self->upper   = upper;
   self->from    = CLAMP (from, lower, upper);
@@ -63,7 +65,7 @@ unity_spatial_swipe_tracker_update (UnitySpatialSwipeTracker *self,
     stale++;
   g_array_remove_range (self->samples, 0, stale);
 
-  self->value = CLAMP (self->value + delta / DISTANCE, self->lower, self->upper);
+  self->value = CLAMP (self->value + delta / self->distance, self->lower, self->upper);
 
   return self->value;
 }
@@ -106,7 +108,7 @@ unity_spatial_swipe_tracker_end (UnitySpatialSwipeTracker *self,
     target = round (self->value);
 
   if (progress_velocity != NULL)
-    *progress_velocity = cancelled ? 0 : speed * 1000 / DISTANCE;
+    *progress_velocity = cancelled ? 0 : speed * 1000 / self->distance;
 
   return CLAMP (target, self->lower, self->upper);
 }

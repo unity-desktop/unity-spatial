@@ -18,10 +18,4 @@ G_DECLARE_FINAL_TYPE (UnitySpatialWindowGrid, unity_spatial_window_grid, UNITY_S
 void       unity_spatial_window_grid_set_model (UnitySpatialWindowGrid *self,
                                                 GListModel             *model);
 
-void       unity_spatial_window_grid_set_morph (UnitySpatialWindowGrid *self,
-                                                gdouble                 morph);
-
-void       unity_spatial_window_grid_set_wall  (UnitySpatialWindowGrid *self,
-                                                gboolean                wall);
-
 G_END_DECLS

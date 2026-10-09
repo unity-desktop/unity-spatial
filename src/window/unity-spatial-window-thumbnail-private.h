@@ -21,7 +21,4 @@ UnitySpatialWindowThumbnail *unity_spatial_window_thumbnail_new         (UnitySp
 
 UnitySpatialWindowPage      *unity_spatial_window_thumbnail_get_page    (UnitySpatialWindowThumbnail *self);
 
-void                         unity_spatial_window_thumbnail_set_chrome_visible (UnitySpatialWindowThumbnail *self,
-                                                                                gboolean                     visible);
-
 G_END_DECLS

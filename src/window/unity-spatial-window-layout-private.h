@@ -15,9 +15,6 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (UnitySpatialWindowLayout, unity_spatial_window_layout, UNITY_SPATIAL, WINDOW_LAYOUT, GtkLayoutManager)
 
-void unity_spatial_window_layout_set_morph (UnitySpatialWindowLayout *self,
-                                            gdouble                   morph);
-
 void unity_spatial_window_layout_fly_from  (UnitySpatialWindowLayout *self,
                                             GtkWidget                *child,
                                             gdouble                   dx,

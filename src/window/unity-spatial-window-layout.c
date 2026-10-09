@@ -13,7 +13,6 @@
 #include "unity-spatial-window-thumbnail-private.h"
 #include "unity-spatial-workspace-view.h"
 
-#define SPACING        24
 #define MAX_PREVIEW    0.95
 #define SMALL_BOOST    1.5
 #define SPACE_WEIGHT   0.1
@@ -46,12 +45,21 @@ struct _UnitySpatialWindowLayout
   AdwAnimation *reflow;
   gdouble       settle;
   gdouble       morph;
+  gint          spacing;
   gint          width;
   gint          height;
   guint         n_placed;
 };
 
 G_DEFINE_FINAL_TYPE (UnitySpatialWindowLayout, unity_spatial_window_layout, GTK_TYPE_LAYOUT_MANAGER)
+
+typedef enum
+{
+  PROP_MORPH = 1,
+  PROP_SPACING,
+} UnitySpatialWindowLayoutProperty;
+
+static GParamSpec *properties[PROP_SPACING + 1];
 
 typedef struct
 {
@@ -298,7 +306,7 @@ retarget (UnitySpatialWindowLayout *self,
       child->from = child->to;
     }
 
-  place_items (items, &area, SPACING);
+  place_items (items, &area, self->spacing);
 
   for (guint i = 0; i < children->len; i++)
     {
@@ -445,12 +453,91 @@ unity_spatial_window_layout_root (GtkLayoutManager *manager)
 }
 
 static void
+set_morph (UnitySpatialWindowLayout *self,
+           gdouble                   morph)
+{
+  if (G_APPROX_VALUE (self->morph, morph, DBL_EPSILON))
+    return;
+
+  self->morph = morph;
+  gtk_widget_queue_allocate (gtk_layout_manager_get_widget (GTK_LAYOUT_MANAGER (self)));
+  g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_MORPH]);
+}
+
+static void
+unity_spatial_window_layout_get_property (GObject    *object,
+                                          guint       prop_id,
+                                          GValue     *value,
+                                          GParamSpec *pspec)
+{
+  UnitySpatialWindowLayout *self = UNITY_SPATIAL_WINDOW_LAYOUT (object);
+
+  switch ((UnitySpatialWindowLayoutProperty) prop_id)
+    {
+    case PROP_MORPH:
+      g_value_set_double (value, self->morph);
+      break;
+    case PROP_SPACING:
+      g_value_set_int (value, self->spacing);
+      break;
+    }
+}
+
+static void
+unity_spatial_window_layout_set_property (GObject      *object,
+                                          guint         prop_id,
+                                          const GValue *value,
+                                          GParamSpec   *pspec)
+{
+  UnitySpatialWindowLayout *self = UNITY_SPATIAL_WINDOW_LAYOUT (object);
+
+  switch ((UnitySpatialWindowLayoutProperty) prop_id)
+    {
+    case PROP_MORPH:
+      set_morph (self, g_value_get_double (value));
+      break;
+    case PROP_SPACING:
+      if (self->spacing != g_value_get_int (value))
+        {
+          self->spacing = g_value_get_int (value);
+          self->width   = -1;
+          gtk_layout_manager_layout_changed (GTK_LAYOUT_MANAGER (self));
+          g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_SPACING]);
+        }
+      break;
+    }
+}
+
+static void
 unity_spatial_window_layout_class_init (UnitySpatialWindowLayoutClass *klass)
 {
   GObjectClass          *object_class = G_OBJECT_CLASS (klass);
   GtkLayoutManagerClass *layout_class = GTK_LAYOUT_MANAGER_CLASS (klass);
 
-  object_class->dispose = unity_spatial_window_layout_dispose;
+  object_class->dispose      = unity_spatial_window_layout_dispose;
+  object_class->get_property = unity_spatial_window_layout_get_property;
+  object_class->set_property = unity_spatial_window_layout_set_property;
+
+  /**
+   * UnitySpatialWindowLayout:morph:
+   *
+   * The position between the windows where they are on the desktop (0) and
+   * their places in the grid (1).
+   */
+  properties[PROP_MORPH] =
+    g_param_spec_double ("morph", NULL, NULL, 0, 1, 1,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  /**
+   * UnitySpatialWindowLayout:spacing:
+   *
+   * The gap between two windows in the grid, in pixels.
+   */
+  properties[PROP_SPACING] =
+    g_param_spec_int ("spacing", NULL, NULL, 0, G_MAXINT, 0,
+                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (object_class, G_N_ELEMENTS (properties), properties);
 
   layout_class->layout_child_type = UNITY_SPATIAL_TYPE_WINDOW_LAYOUT_CHILD;
   layout_class->measure           = unity_spatial_window_layout_measure;
@@ -463,19 +550,6 @@ unity_spatial_window_layout_init (UnitySpatialWindowLayout *self)
 {
   self->settle = 1;
   self->morph  = 1;
-}
-
-void
-unity_spatial_window_layout_set_morph (UnitySpatialWindowLayout *self,
-                                       gdouble                   morph)
-{
-  g_return_if_fail (UNITY_SPATIAL_IS_WINDOW_LAYOUT (self));
-
-  if (G_APPROX_VALUE (self->morph, morph, DBL_EPSILON))
-    return;
-
-  self->morph = morph;
-  gtk_widget_queue_allocate (gtk_layout_manager_get_widget (GTK_LAYOUT_MANAGER (self)));
 }
 
 void

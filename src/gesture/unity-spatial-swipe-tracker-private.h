@@ -15,7 +15,8 @@ typedef struct _UnitySpatialSwipeTracker UnitySpatialSwipeTracker;
 
 UnitySpatialSwipeTracker *unity_spatial_swipe_tracker_new    (gdouble                   from,
                                                               gdouble                   lower,
-                                                              gdouble                   upper);
+                                                              gdouble                   upper,
+                                                              gdouble                   distance);
 void                      unity_spatial_swipe_tracker_free   (UnitySpatialSwipeTracker *self);
 gdouble                   unity_spatial_swipe_tracker_update (UnitySpatialSwipeTracker *self,
                                                               guint32                   time,

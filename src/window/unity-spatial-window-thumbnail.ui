@@ -9,14 +9,29 @@
       <object class="GtkButton" id="card">
         <property name="css-name">windowcard</property>
         <property name="action-name">spatialview.activate-window</property>
+        <accessibility>
+          <relation name="labelled-by">title</relation>
+        </accessibility>
         <property name="child">
-          <object class="UnitySpatialPreviewMirror" id="preview"/>
+          <object class="UnitySpatialPreviewMirror">
+            <binding name="view-id">
+              <lookup name="view-id" type="UnitySpatialWindowPage">
+                <lookup name="page">UnitySpatialWindowThumbnail</lookup>
+              </lookup>
+            </binding>
+          </object>
         </property>
       </object>
     </child>
     <child>
       <object class="GtkRevealer" id="title_revealer">
         <property name="transition-type">crossfade</property>
+        <binding name="reveal-child">
+          <closure type="gboolean" function="shows_hover_chrome">
+            <lookup name="chrome">UnitySpatialWindowThumbnail</lookup>
+            <lookup name="contains-pointer">motion</lookup>
+          </closure>
+        </binding>
         <property name="halign">start</property>
         <property name="valign">start</property>
         <property name="child">
@@ -26,6 +41,11 @@
             <property name="ellipsize">end</property>
             <property name="single-line-mode">True</property>
             <property name="can-target">False</property>
+            <binding name="label">
+              <lookup name="title" type="UnitySpatialWindowPage">
+                <lookup name="page">UnitySpatialWindowThumbnail</lookup>
+              </lookup>
+            </binding>
             <style>
               <class name="caption"/>
               <class name="osd"/>
@@ -38,10 +58,16 @@
     <child>
       <object class="GtkRevealer" id="close_revealer">
         <property name="transition-type">crossfade</property>
+        <binding name="reveal-child">
+          <closure type="gboolean" function="shows_hover_chrome">
+            <lookup name="chrome">UnitySpatialWindowThumbnail</lookup>
+            <lookup name="contains-pointer">motion</lookup>
+          </closure>
+        </binding>
         <property name="halign">end</property>
         <property name="valign">start</property>
         <property name="child">
-          <object class="GtkButton" id="close_button">
+          <object class="GtkButton">
             <property name="margin-top">6</property>
             <property name="margin-end">6</property>
             <property name="can-focus">False</property>
@@ -62,11 +88,19 @@
     <child>
       <object class="GtkRevealer" id="icon_revealer">
         <property name="transition-type">crossfade</property>
+        <property name="reveal-child" bind-source="UnitySpatialWindowThumbnail" bind-property="chrome" bind-flags="sync-create"/>
         <property name="halign">center</property>
         <property name="valign">end</property>
         <property name="can-target">False</property>
         <property name="child">
-          <object class="GtkImage" id="icon">
+          <object class="GtkImage">
+            <binding name="gicon">
+              <closure type="GIcon" function="icon_for_app_id">
+                <lookup name="app-id" type="UnitySpatialWindowPage">
+                  <lookup name="page">UnitySpatialWindowThumbnail</lookup>
+                </lookup>
+              </closure>
+            </binding>
             <property name="margin-top">12</property>
             <property name="margin-bottom">12</property>
             <property name="margin-start">12</property>
@@ -81,9 +115,7 @@
       </object>
     </child>
     <child>
-      <object class="GtkEventControllerMotion" id="motion">
-        <signal name="notify::contains-pointer" handler="update_chrome" swapped="true"/>
-      </object>
+      <object class="GtkEventControllerMotion" id="motion"/>
     </child>
   </template>
 </interface>
