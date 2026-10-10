@@ -8,8 +8,29 @@
     <property name="exclusivity">ignore</property>
     <property name="keymode">none</property>
     <property name="content">
-      <object class="GtkPicture" id="wallpaper">
-        <property name="content-fit">cover</property>
+      <object class="GtkStack" id="stack">
+        <property name="transition-duration">600</property>
+        <signal name="notify::transition-running" handler="transition_running_cb" swapped="true"/>
+        <child>
+          <object class="GtkStackPage">
+            <property name="name">front</property>
+            <property name="child">
+              <object class="GtkPicture" id="front">
+                <property name="content-fit">cover</property>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkStackPage">
+            <property name="name">back</property>
+            <property name="child">
+              <object class="GtkPicture" id="back">
+                <property name="content-fit">cover</property>
+              </object>
+            </property>
+          </object>
+        </child>
       </object>
     </property>
   </template>
