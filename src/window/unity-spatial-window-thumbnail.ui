@@ -9,6 +9,7 @@
       <object class="GtkButton" id="card">
         <property name="css-name">windowcard</property>
         <property name="action-name">spatialview.activate-window</property>
+        <property name="can-target" bind-source="UnitySpatialWindowThumbnail" bind-property="chrome" bind-flags="sync-create"/>
         <accessibility>
           <relation name="labelled-by">title</relation>
         </accessibility>

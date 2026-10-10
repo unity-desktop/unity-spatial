@@ -19,7 +19,6 @@ struct _UnitySpatialWorkspaceThumbnail
   UnitySpatialWorkspacePage *workspace;
   UnitySpatialPreviewMirror *backdrop;
   UnitySpatialWindowGrid    *grid;
-  GtkButton                 *button;
   gdouble                    progress;
   gdouble                    morph;
   gboolean                   wall;
@@ -36,6 +35,13 @@ typedef enum
 } UnitySpatialWorkspaceThumbnailProperty;
 
 static GParamSpec *properties[PROP_WALL + 1];
+
+typedef enum
+{
+  SIGNAL_ACTIVATE,
+} UnitySpatialWorkspaceThumbnailSignal;
+
+static guint signals[SIGNAL_ACTIVATE + 1];
 
 static gboolean
 shows (UnitySpatialWorkspaceThumbnail *self,
@@ -83,6 +89,28 @@ update (UnitySpatialWorkspaceThumbnail *self)
     }
 }
 
+static void
+released_cb (UnitySpatialWorkspaceThumbnail *self,
+             gint                            n_press,
+             gdouble                         x,
+             gdouble                         y,
+             GtkGestureClick                *click)
+{
+  if (!self->wall)
+    return;
+
+  gtk_gesture_set_state (GTK_GESTURE (click), GTK_EVENT_SEQUENCE_CLAIMED);
+  gtk_widget_activate (GTK_WIDGET (self));
+}
+
+static void
+activate_cb (UnitySpatialWorkspaceThumbnail *self)
+{
+  gtk_widget_activate_action (GTK_WIDGET (self), "spatialview.activate-workspace", "(ii)",
+                              unity_spatial_workspace_page_get_x (self->workspace),
+                              unity_spatial_workspace_page_get_y (self->workspace));
+}
+
 static gboolean
 drop_cb (UnitySpatialWorkspaceThumbnail *self,
          const GValue              *value)
@@ -105,7 +133,7 @@ unity_spatial_workspace_thumbnail_grab_focus (GtkWidget *widget)
   UnitySpatialWorkspaceThumbnail *self = UNITY_SPATIAL_WORKSPACE_THUMBNAIL (widget);
 
   if (self->wall)
-    return gtk_widget_grab_focus (GTK_WIDGET (self->button));
+    return GTK_WIDGET_CLASS (unity_spatial_workspace_thumbnail_parent_class)->grab_focus (widget);
 
   return gtk_widget_get_focus_child (GTK_WIDGET (self->grid)) != NULL ||
          gtk_widget_child_focus (GTK_WIDGET (self->grid), GTK_DIR_TAB_FORWARD);
@@ -130,9 +158,8 @@ unity_spatial_workspace_thumbnail_constructed (GObject *object)
   g_signal_connect_object (view, "notify::current", G_CALLBACK (update), self, G_CONNECT_SWAPPED);
   update (self);
 
-  gtk_actionable_set_action_target (GTK_ACTIONABLE (self->button), "(ii)", x, y);
   label = g_strdup_printf ("Workspace %d", y * unity_spatial_workspace_view_get_grid_width (view) + x + 1);
-  gtk_accessible_update_property (GTK_ACCESSIBLE (self->button), GTK_ACCESSIBLE_PROPERTY_LABEL, label, -1);
+  gtk_accessible_update_property (GTK_ACCESSIBLE (self), GTK_ACCESSIBLE_PROPERTY_LABEL, label, -1);
 }
 
 static void
@@ -201,8 +228,9 @@ unity_spatial_workspace_thumbnail_set_property (GObject      *object,
 static void
 unity_spatial_workspace_thumbnail_class_init (UnitySpatialWorkspaceThumbnailClass *klass)
 {
-  GObjectClass   *object_class = G_OBJECT_CLASS (klass);
-  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
+  GObjectClass           *object_class = G_OBJECT_CLASS (klass);
+  GtkWidgetClass         *widget_class = GTK_WIDGET_CLASS (klass);
+  g_autoptr (GtkShortcut) activate     = NULL;
 
   object_class->constructed  = unity_spatial_workspace_thumbnail_constructed;
   object_class->dispose      = unity_spatial_workspace_thumbnail_dispose;
@@ -248,6 +276,21 @@ unity_spatial_workspace_thumbnail_class_init (UnitySpatialWorkspaceThumbnailClas
 
   g_object_class_install_properties (object_class, G_N_ELEMENTS (properties), properties);
 
+  /**
+   * UnitySpatialWorkspaceThumbnail::activate:
+   *
+   * Switches to the workspace and closes the view. Emitted by a click or by
+   * Enter or Space on the workspaces page.
+   */
+  signals[SIGNAL_ACTIVATE] =
+    g_signal_new_class_handler ("activate", G_TYPE_FROM_CLASS (klass), G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION,
+                                G_CALLBACK (activate_cb), NULL, NULL, NULL, G_TYPE_NONE, 0);
+  gtk_widget_class_set_activate_signal (widget_class, signals[SIGNAL_ACTIVATE]);
+  activate = gtk_shortcut_new (gtk_shortcut_trigger_parse_string ("Return|KP_Enter|ISO_Enter|space|KP_Space"),
+                               gtk_signal_action_new ("activate"));
+  gtk_widget_class_add_shortcut (widget_class, activate);
+  gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_BUTTON);
+
   g_type_ensure (UNITY_SPATIAL_TYPE_PREVIEW_MIRROR);
   g_type_ensure (UNITY_SPATIAL_TYPE_WINDOW_GRID);
   g_type_ensure (UNITY_SPATIAL_TYPE_WINDOW_PAGE);
@@ -255,8 +298,8 @@ unity_spatial_workspace_thumbnail_class_init (UnitySpatialWorkspaceThumbnailClas
   gtk_widget_class_set_template_from_resource (widget_class, "/org/unity/spatial/unity-spatial-workspace-thumbnail.ui");
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialWorkspaceThumbnail, backdrop);
   gtk_widget_class_bind_template_child (widget_class, UnitySpatialWorkspaceThumbnail, grid);
-  gtk_widget_class_bind_template_child (widget_class, UnitySpatialWorkspaceThumbnail, button);
   gtk_widget_class_bind_template_callback (widget_class, drop_cb);
+  gtk_widget_class_bind_template_callback (widget_class, released_cb);
 
   gtk_widget_class_set_css_name (widget_class, "workspacethumbnail");
 }
